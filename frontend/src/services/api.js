@@ -1,0 +1,207 @@
+import axios from 'axios';
+
+const BASE_URL = '/api';
+
+// Create axios instance with default config
+const api = axios.create({
+  baseURL: BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor
+api.interceptors.request.use(
+  async (config) => {
+    // Add any auth tokens if needed
+    const token = localStorage.getItem('sessionToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor
+api.interceptors.response.use(
+  (response) => {
+    return response.data;
+  },
+  async (error) => {
+    // Handle common errors
+    if (error.response) {
+      const { status, data } = error.response;
+
+      // Authentication errors
+      if (status === 401) {
+        error.message = 'Authentication required. Please check your connection.';
+      }
+      // Rate limiting
+      else if (status === 429) {
+        const retryAfter = data.retryAfter || 60;
+        error.message = `Too many requests. Please try again in ${retryAfter} seconds.`;
+      }
+      // Not found
+      else if (status === 404) {
+        error.message = data.error || 'Resource not found';
+      }
+      // Validation errors
+      else if (status === 400 && data.validationErrors) {
+        error.message = data.validationErrors.join(', ');
+      }
+      // Server error
+      else if (status >= 500) {
+        error.message = 'Server error. Please try again later.';
+      }
+      // Use server error message
+      else if (data.error) {
+        error.message = data.error;
+      }
+
+      // Add error code if available
+      if (data.code) {
+        error.code = data.code;
+      }
+    } else if (error.request) {
+      error.message = 'Network error. Please check your connection.';
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// Standalone API functions
+export const validateUserCredentials = async (studentId, email) => {
+  return api.post('/mock-exams/validate-credits', {
+    student_id: studentId,
+    email: email,
+    mock_type: 'Situational Judgment', // Default type for user validation
+  });
+};
+
+// API service methods
+const apiService = {
+  // Mock Exams
+  mockExams: {
+    /**
+     * Get available mock exams by type
+     */
+    getAvailable: async (mockType, includeCapacity = true) => {
+      return api.get('/mock-exams/available', {
+        params: {
+          mock_type: mockType,
+          include_capacity: includeCapacity,
+          realtime: true, // Always use real-time capacity calculation for accurate availability
+        },
+      });
+    },
+
+    /**
+     * Validate user credits for booking
+     */
+    validateCredits: async (studentId, email, mockType) => {
+      return api.post('/mock-exams/validate-credits', {
+        student_id: studentId,
+        email: email,
+        mock_type: mockType,
+      });
+    },
+  },
+
+  // Bookings
+  bookings: {
+    /**
+     * Create a new booking
+     */
+    create: async (bookingData) => {
+      return api.post('/bookings/create', bookingData);
+    },
+  },
+};
+
+// Helper functions
+export const formatDate = (dateString) => {
+  if (!dateString) return 'TBD';
+
+  // Handle date string that might not include timezone info
+  // If the date string is in YYYY-MM-DD format, treat it as local date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month is 0-indexed
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  }
+
+  // For other date formats, use normal Date parsing
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
+
+export const formatTime = (dateString) => {
+  if (!dateString) return '';
+
+  // Handle UTC timestamps properly
+  const date = new Date(dateString);
+
+  // Convert UTC to local time for display
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/Toronto'
+  });
+};
+// Format time range for exam sessions (start_time - end_time)
+export const formatTimeRange = (exam) => {
+  if (!exam) return '';
+
+  // If we have start_time and end_time, use them
+  if (exam.start_time && exam.end_time) {
+    const startTime = formatTime(exam.start_time);
+    const endTime = formatTime(exam.end_time);
+    return `${startTime} - ${endTime}`;
+  }
+
+  // Fallback: if we only have exam_date, create a reasonable time range
+  if (exam.exam_date) {
+    // For YYYY-MM-DD format, append a time to avoid timezone issues
+    const dateStr = exam.exam_date.includes('T') ? exam.exam_date : `${exam.exam_date}T09:00:00`;
+    const startDate = new Date(dateStr);
+    const endDate = new Date(startDate.getTime() + 3 * 60 * 60 * 1000); // Add 3 hours
+
+    const startTime = formatTime(startDate);
+    const endTime = formatTime(endDate);
+    return `${startTime} - ${endTime}`;
+  }
+
+  return 'Time TBD';
+};
+
+export const getCapacityColor = (availableSlots, capacity) => {
+  const percentage = (availableSlots / capacity) * 100;
+  if (percentage === 0) return 'error';
+  if (percentage <= 20) return 'warning';
+  return 'success';
+};
+
+export const getCapacityText = (availableSlots) => {
+  if (availableSlots === 0) return 'Full';
+  if (availableSlots === 1) return '1 slot left';
+  if (availableSlots <= 3) return `${availableSlots} slots left`;
+  return `${availableSlots} slots available`;
+};
+
+export default apiService;
