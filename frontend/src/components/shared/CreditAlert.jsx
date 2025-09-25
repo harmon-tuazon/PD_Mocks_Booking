@@ -77,34 +77,73 @@ const CreditAlert = ({ credits, creditBreakdown, mockType, variant = 'info' }) =
   const specificCreditName = getSpecificCreditName(mockType);
 
   return (
-    <div className={`border rounded-lg p-4 ${styles.container}`}>
-      <div className="flex">
-        <div className={`flex-shrink-0 ${styles.icon}`}>
-          {getIcon()}
-        </div>
-        <div className="ml-3">
-          <h3 className={`text-sm font-medium ${styles.text}`}>
-            {credits > 0 ? 'Credit Verification Successful' : 'Insufficient Credits'}
-          </h3>
-          <div className={`mt-2 text-sm ${styles.text}`}>
-            <div className="space-y-1">
-              <p>
-                <strong>{specificCreditName}:</strong> {specific_credits}
-              </p>
-              {mockType !== 'Mini-mock' && (
-                <p>
-                  <strong>Shared Credits:</strong> {shared_credits}
+    <div className={`border rounded-lg overflow-hidden ${styles.container}`}>
+      <div className="p-4">
+        <div className="flex">
+          <div className={`flex-shrink-0 ${styles.icon}`}>
+            {getIcon()}
+          </div>
+          <div className="ml-3 flex-1">
+            <h3 className={`font-subheading text-base font-medium ${styles.text}`}>
+              {credits > 0 ? 'Credit Verification Successful' : 'Insufficient Credits'}
+            </h3>
+            <div className={`mt-3 ${styles.text}`}>
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-200">
+                    <tr className="bg-white">
+                      <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                        {specificCreditName}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-right">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          specific_credits > 0
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {specific_credits}
+                        </span>
+                      </td>
+                    </tr>
+                    {mockType !== 'Mini-mock' && (
+                      <tr className="bg-gray-50">
+                        <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                          Shared Credits
+                        </td>
+                        <td className="px-3 py-2 text-sm text-right">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            shared_credits > 0
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {shared_credits}
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="bg-gray-50 font-medium">
+                      <td className="px-3 py-2 text-sm font-bold text-gray-900">
+                        Total for {mockType}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-right">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          credits > 0
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {credits}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              {credits > 0 && (
+                <p className="mt-3 font-body text-xs text-gray-600">
+                  You have sufficient credits to book this exam.
                 </p>
               )}
-              <p className="mt-2 font-medium">
-                <strong>Total Available for {mockType}:</strong> {credits}
-              </p>
             </div>
-            {credits > 0 && (
-              <p className="mt-2 text-xs opacity-75">
-                You have sufficient credits to book this exam.
-              </p>
-            )}
           </div>
         </div>
       </div>

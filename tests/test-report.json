@@ -1,0 +1,13 @@
+{
+  "timestamp": "2025-09-25T18:09:20.953Z",
+  "duration": "14 seconds",
+  "results": {
+    "unit": "FAIL",
+    "integration": "FAIL",
+    "manual": "MANUAL_REQUIRED",
+    "accessibility": null,
+    "overall": "FAIL",
+    "e2e": "FAIL"
+  },
+  "summary": "Some tests failed"
+}

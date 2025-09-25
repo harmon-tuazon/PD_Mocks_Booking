@@ -47,7 +47,7 @@ const LoginForm = () => {
     } finally {
       setLoading(false);
     }
-  };;
+  };
 
   const clearError = () => {
     setError('');

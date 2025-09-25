@@ -115,10 +115,64 @@ const apiService = {
   // Bookings
   bookings: {
     /**
+     * Get list of bookings for a user
+     */
+    list: async (params = {}) => {
+      return api.get('/bookings/list', {
+        params: {
+          student_id: params.student_id,
+          email: params.email,
+          filter: params.filter, // Changed from 'status' to 'filter' to match API expectation
+          search: params.search,
+          page: params.page || 1,
+          limit: params.limit || 20
+        }
+      });
+    },
+
+    /**
      * Create a new booking
      */
     create: async (bookingData) => {
       return api.post('/bookings/create', bookingData);
+    },
+
+    /**
+     * Cancel a booking
+     * @param {string} bookingId - The HubSpot booking object ID
+     * @param {object} cancelData - Cancellation data including student_id, email, and optional reason
+     */
+    cancelBooking: async (bookingId, cancelData = {}) => {
+      // Extract user data from localStorage if not provided
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+
+      const requestData = {
+        student_id: cancelData.student_id || userData.student_id,
+        email: cancelData.email || userData.email,
+        reason: cancelData.reason || 'User requested cancellation'
+      };
+
+      // Make DELETE request to the booking endpoint
+      return api.delete(`/bookings/${bookingId}`, {
+        data: requestData
+      });
+    },
+
+    /**
+     * Get single booking details
+     * @param {string} bookingId - The HubSpot booking object ID
+     * @param {object} params - Query parameters including student_id and email
+     */
+    get: async (bookingId, params = {}) => {
+      // Extract user data from localStorage if not provided
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+
+      return api.get(`/bookings/${bookingId}`, {
+        params: {
+          student_id: params.student_id || userData.student_id,
+          email: params.email || userData.email
+        }
+      });
     },
   },
 };

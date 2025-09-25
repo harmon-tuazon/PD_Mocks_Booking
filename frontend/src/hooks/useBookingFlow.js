@@ -160,7 +160,6 @@ const useBookingFlow = (initialMockExamId = null, initialMockType = null) => {
       const bookingPayload = {
         mock_exam_id: bookingData.mockExamId,
         contact_id: bookingData.contactId,
-        enrollment_id: bookingData.enrollmentId || null,
         student_id: bookingData.studentId,
         name: bookingData.name.trim(),
         email: bookingData.email,
@@ -169,21 +168,63 @@ const useBookingFlow = (initialMockExamId = null, initialMockType = null) => {
         exam_date: bookingData.examDate,
       };
 
+
       const result = await apiService.bookings.create(bookingPayload);
 
-
-      if (!result.success) {
-        throw new Error(result.error || 'Booking failed');
+      if (!result || !result.success) {
+        throw new Error(result?.error || 'Booking failed - invalid response from server');
       }
 
-      // Create updated booking data
+      // Enhanced logging for debugging API responses
+      console.log('📨 Raw API Response:', {
+        success: result?.success,
+        hasData: !!result?.data,
+        dataKeys: result?.data ? Object.keys(result.data) : [],
+        fullResponse: result
+      });
+
+      // Enhanced validation with detailed logging
+      if (!result.data?.booking_id) {
+        console.error('🚨 API Response Validation Failed:', {
+          expectedStructure: {
+            success: 'boolean',
+            data: {
+              booking_id: 'string (REQUIRED)',
+              booking_record_id: 'string',
+              confirmation_message: 'string',
+              exam_details: 'object',
+              credit_details: 'object'
+            }
+          },
+          actualStructure: {
+            success: result?.success,
+            data: result?.data ? {
+              keys: Object.keys(result.data),
+              booking_id: result.data.booking_id,
+              booking_record_id: result.data.booking_record_id,
+              hasBookingId: 'booking_id' in result.data,
+              bookingIdType: typeof result.data.booking_id
+            } : 'undefined'
+          },
+          fullResult: result
+        });
+        throw new Error('Booking completed but confirmation data is incomplete - missing booking_id');
+      }
+
+      console.log('✅ API Response validation passed:', {
+        booking_id: result.data.booking_id,
+        booking_record_id: result.data.booking_record_id
+      });
+
+      // Create updated booking data with proper null checking
       const updatedBookingData = {
         ...bookingData,
-        bookingId: result.data.booking_id,
-        bookingRecordId: result.data.booking_record_id,
-        confirmationMessage: result.data.confirmation_message,
-        examLocation: result.data.exam_details.location,
-        remainingCredits: result.data.remaining_credits,
+        bookingId: result.data?.booking_id || null,
+        bookingRecordId: result.data?.booking_record_id || null,
+        confirmationMessage: result.data?.confirmation_message || 'Booking confirmed successfully',
+        // Safe access with fallback values
+        examLocation: result.data?.exam_details?.location || 'Mississauga',
+        remainingCredits: result.data?.credit_details?.remaining_credits || 0,
       };
 
       // Update state with confirmation data

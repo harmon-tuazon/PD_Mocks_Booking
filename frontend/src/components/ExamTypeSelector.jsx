@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getUserSession } from '../utils/auth';
 import apiService from '../services/api';
 import { ResponsiveLogo } from './shared/Logo';
+import ExistingBookingsCard from './shared/ExistingBookingsCard';
 
 const ExamTypeSelector = () => {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ const ExamTypeSelector = () => {
   const examTypes = [
     {
       type: 'Situational Judgment',
-      description: 'Test your clinical decision-making and professional judgment skills with scenario-based questions.',
+      description: 'Test your situational decision-making skills with scenario-based simulations.',
       icon: '/assets/SJ-icon.svg',
       color: 'primary',
       duration: '2 hours',
@@ -20,7 +21,7 @@ const ExamTypeSelector = () => {
     },
     {
       type: 'Clinical Skills',
-      description: 'Demonstrate your practical clinical abilities and patient interaction skills in simulated scenarios.',
+      description: 'Demonstrate your practical clinical abilities skills in simulated cases.',
       icon: '/assets/CS-icon.svg',
       color: 'success',
       duration: '3 hours',
@@ -55,8 +56,8 @@ const ExamTypeSelector = () => {
           userData.email,
           examType.type
         );
-        if (result.success) {
-          creditData[examType.type] = result.data.credit_breakdown;
+        if (result && result.data) {
+          creditData[examType.type] = result.data;
         }
       }
       setCreditInfo(creditData);
@@ -69,9 +70,13 @@ const ExamTypeSelector = () => {
     navigate(`/book/exams?type=${encodeURIComponent(type)}`);
   };
 
+  const handleViewAllBookings = () => {
+    navigate('/my-bookings');
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50">
-      <div className="container-brand py-12">
+    <div className="bg-gradient-to-br from-primary-50 via-white to-primary-50 min-h-full">
+      <div className="container-brand py-8 lg:py-12">
         <div className="text-center mb-12 animate-fade-in">
           <div className="flex items-center justify-center gap-4 mb-6">
             <ResponsiveLogo
@@ -87,7 +92,8 @@ const ExamTypeSelector = () => {
           </p>
         </div>
 
-        <div className="grid-exam-cards-large content-width-lg">
+        {/* Exam Type Cards - Now at the top */}
+        <div className="grid-exam-cards-large content-width-lg mb-12">
           {examTypes.map((exam, index) => (
             <div
               key={exam.type}
@@ -100,13 +106,18 @@ const ExamTypeSelector = () => {
                   <img
                     src={exam.icon}
                     alt={`${exam.type} icon`}
-                    className="w-12 h-12 object-contain"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
                   />
                 </div>
-                <h2 className="font-headline text-h3 font-semibold text-primary-900 mb-3">
+
+                <h3 className="font-subheading text-xl font-semibold text-primary-900 mb-3">
                   {exam.type}
-                </h2>
-                <p className="font-body text-base text-primary-700 mb-6 min-h-[60px]">
+                </h3>
+
+                <p className="font-body text-primary-700 mb-6 leading-relaxed">
                   {exam.description}
                 </p>
 
@@ -137,84 +148,67 @@ const ExamTypeSelector = () => {
           ))}
         </div>
 
-        {/* Combined Credit Overview Table - Moved to Bottom */}
-        {userSession && Object.keys(creditInfo).length > 0 && (
-          <div className="mt-12 content-width-md">
-            <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-              <div className="px-6 py-4 border-b">
-                <h3 className="font-subheading text-lg font-medium text-primary-900">Your Credits</h3>
-                <p className="font-body text-sm text-primary-600 mt-1">Available credits for all exam types</p>
-              </div>
+        {/* User Info Cards - Now below exam cards with fixed positioning */}
+        {userSession && (
+          <div className="content-width-lg">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Existing Bookings Card - Always on the LEFT */}
+              <ExistingBookingsCard
+                studentId={userSession.studentId}
+                email={userSession.email}
+                maxItems={3}
+                onViewAll={handleViewAllBookings}
+                className="h-full"
+              />
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Exam Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Specific Credits
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Shared Credits
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Available
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {examTypes.map((examType, index) => {
-                      const breakdown = creditInfo[examType.type];
-                      if (!breakdown) return null;
+              {/* Credits Overview Table - Always on the RIGHT */}
+              {Object.keys(creditInfo).length > 0 && (
+                <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b">
+                    <h3 className="font-subheading text-lg font-medium text-primary-900">Available Credits</h3>
+                    <p className="font-body text-sm text-primary-600 mt-1">Your current credit balance</p>
+                  </div>
 
-                      const specific = breakdown.specific_credits || 0;
-                      const shared = examType.type === 'Mini-mock' ? 0 : (breakdown.shared_credits || 0);
-                      const total = specific + shared;
-
-                      return (
-                        <tr key={examType.type} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{examType.type}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              specific > 0
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {specific}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {examType.type === 'Mini-mock' ? (
-                              <span className="text-xs text-gray-400">N/A</span>
-                            ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Exam Type
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Credits
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {Object.entries(creditInfo).map(([examType, credits], index) => (
+                          <tr key={examType} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">
+                                {examType}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-center">
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                shared > 0
-                                  ? 'bg-blue-100 text-blue-800'
+                                (credits?.available_credits || 0) > 0
+                                  ? 'bg-green-100 text-green-800'
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {shared}
+                                {credits?.available_credits || 0}
                               </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold">
-                            <span className={total > 0 ? 'text-green-600' : 'text-red-600'}>
-                              {total}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-              <div className="px-6 py-3 bg-gray-50 text-xs text-gray-500">
-                Specific credits can only be used for their designated exam type. Shared credits can be used for any exam type except Mini-mock.
-              </div>
+                  <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500">
+                    Credits are automatically deducted when you book an exam.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

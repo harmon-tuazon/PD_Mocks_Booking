@@ -5,6 +5,7 @@ import CreditAlert from './shared/CreditAlert';
 import SessionTimer from './shared/SessionTimer';
 import Logo from './shared/Logo';
 import InsufficientCreditsCard from './shared/InsufficientCreditsCard';
+import LoggedInUserCard from './shared/LoggedInUserCard';
 import { formatDate } from '../services/api';
 
 import { getUserSession, clearUserSession } from '../utils/auth';
@@ -157,23 +158,7 @@ const BookingForm = () => {
           {/* User & Exam Info Grid */}
           <div className="grid-cards-2 gap-brand mb-6">
             {/* User Info */}
-            <div className="card-brand-primary">
-              <h2 className="text-lg font-headline font-semibold text-primary-900 mb-2">Logged in as</h2>
-              <div className="space-brand-small text-sm font-body text-primary-700">
-                <div className="form-field-even">
-                  <span className="font-medium">Name:</span>
-                  <span>{userSession.studentName}</span>
-                </div>
-                <div className="form-field-even">
-                  <span className="font-medium">Student ID:</span>
-                  <span>{userSession.studentId}</span>
-                </div>
-                <div className="form-field-even">
-                  <span className="font-medium">Email:</span>
-                  <span className="break-words">{userSession.email}</span>
-                </div>
-              </div>
-            </div>
+            <LoggedInUserCard userSession={userSession} />
 
             {/* Exam Details Card */}
             <div className="card-brand-primary">

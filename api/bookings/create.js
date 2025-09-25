@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { HubSpotService, HUBSPOT_OBJECTS } = require('../_shared/hubspot');
-const { validateInput } = require('../_shared/validation');
+const { schemas } = require('../_shared/validation');
 const {
   setCorsHeaders,
   handleOptionsRequest,
@@ -40,52 +40,61 @@ function getCreditFieldToDeduct(mockType, creditBreakdown) {
  * POST /api/bookings/create
  * Create a new booking for a mock exam slot and handle all associations
  */
-module.exports = async (req, res) => {
-  // Set CORS headers
-  setCorsHeaders(res);
-
-  // Handle OPTIONS request
-  if (handleOptionsRequest(req, res)) {
-    return;
-  }
-
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json(
-      createErrorResponse(new Error('Method not allowed'))
-    );
-  }
-
+module.exports = module.exports = async function handler(req, res) {
   let bookingCreated = false;
   let createdBookingId = null;
 
+  setCorsHeaders(res);
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return handleOptionsRequest(req, res);
+  }
+
   try {
-    // Verify environment variables
+    // Security check
+    await rateLimitMiddleware(req, res);
+
+    // Environment validation
     verifyEnvironmentVariables();
 
-    // Apply rate limiting
-    const rateLimiter = rateLimitMiddleware({
-      maxRequests: 10,
-      windowMs: 60000 // 1 minute
-    });
-
-    if (await rateLimiter(req, res)) {
-      return; // Request was rate limited
+    // Only allow POST method
+    if (req.method !== 'POST') {
+      const error = new Error('Method not allowed');
+      error.status = 405;
+      throw error;
     }
 
-    // Validate input
-    const validatedData = await validateInput(req.body, 'bookingCreation');
+    // Validate input using the bookingCreation schema
+    const { error, value: validatedData } = schemas.bookingCreation.validate(req.body);
+    if (error) {
+      const validationError = new Error(`Invalid input: ${error.details.map(detail => detail.message).join(', ')}`);
+      validationError.status = 400;
+      validationError.code = 'VALIDATION_ERROR';
+      throw validationError;
+    }
+
     const {
-      mock_exam_id,
       contact_id,
-      enrollment_id,
+      mock_exam_id,
       student_id,
       name,
       email,
-      dominant_hand,
+      exam_date,
       mock_type,
-      exam_date
+      dominant_hand
     } = validatedData;
+
+    // Logging
+    console.log('📝 Processing booking request:', {
+      contact_id,
+      mock_exam_id,
+      name: sanitizeInput(name),
+      email: sanitizeInput(email),
+      exam_date,
+      mock_type,
+      dominant_hand
+    });
 
     // Sanitize inputs
     const sanitizedName = sanitizeInput(name);
@@ -123,8 +132,8 @@ module.exports = async (req, res) => {
       throw error;
     }
 
-    // Step 2: Generate booking ID and check for duplicates
-    const bookingId = `${sanitizedName} - ${exam_date}`;
+    // Step 2: Generate booking ID with full mock type name and check for duplicates
+    const bookingId = `${mock_type}-${sanitizedName} - ${exam_date}`;
 
     const isDuplicate = await hubspot.checkExistingBooking(bookingId);
     if (isDuplicate) {
@@ -186,7 +195,7 @@ module.exports = async (req, res) => {
 
     // Step 5: Create associations with detailed logging
     console.log(`Creating associations for booking ${createdBookingId}`);
-    console.log(`Contact ID: ${contact_id}, Mock Exam ID: ${mock_exam_id}, Enrollment ID: ${enrollment_id || 'N/A'}`);
+    console.log(`Contact ID: ${contact_id}, Mock Exam ID: ${mock_exam_id}`);
 
     const associationResults = [];
 
@@ -240,34 +249,17 @@ module.exports = async (req, res) => {
       associationResults.push({ type: 'mock_exam', success: false, error: err.message });
     }
 
-    // Associate with Enrollment (if provided)
-    if (enrollment_id) {
-      try {
-        console.log(`Attempting to associate booking ${createdBookingId} with enrollment ${enrollment_id}`);
-        const enrollmentAssociation = await hubspot.createAssociation(
-          HUBSPOT_OBJECTS.bookings,
-          createdBookingId,
-          HUBSPOT_OBJECTS.enrollments,
-          enrollment_id
-        );
-        console.log('✅ Enrollment association created successfully:', enrollmentAssociation);
-        associationResults.push({ type: 'enrollment', success: true, result: enrollmentAssociation });
-      } catch (err) {
-        console.error('❌ Failed to associate with enrollment:', err);
-        console.error('Enrollment association error details:', {
-          fromObject: HUBSPOT_OBJECTS.bookings,
-          fromId: createdBookingId,
-          toObject: HUBSPOT_OBJECTS.enrollments,
-          toId: enrollment_id,
-          error: err.message,
-          status: err.response?.status,
-          data: err.response?.data
-        });
-        associationResults.push({ type: 'enrollment', success: false, error: err.message });
-      }
-    }
-
     console.log('Association results summary:', associationResults);
+
+    // Check critical associations - Contact and Mock Exam are required for booking integrity
+    const contactAssocSuccess = associationResults.find(r => r.type === 'contact')?.success || false;
+    const mockExamAssocSuccess = associationResults.find(r => r.type === 'mock_exam')?.success || false;
+
+    // Log association status for monitoring
+    console.log('Critical associations status:', {
+      contact: contactAssocSuccess ? '✅' : '❌',
+      mock_exam: mockExamAssocSuccess ? '✅' : '❌'
+    });
 
     // Step 6: Update total bookings counter
     const newTotalBookings = totalBookings + 1;
@@ -307,7 +299,18 @@ module.exports = async (req, res) => {
         // Don't throw - booking is already successful
       });
 
-    // Prepare response
+    // Determine overall success - booking succeeds if core operations complete
+    const bookingSuccess = true; // Booking was created successfully
+    const associationWarnings = [];
+
+    if (!contactAssocSuccess) {
+      associationWarnings.push('Contact association failed - booking may not appear in student records');
+    }
+    if (!mockExamAssocSuccess) {
+      associationWarnings.push('Mock exam association failed - exam may not show booking count update');
+    }
+
+    // Prepare response - booking is successful regardless of association issues
     const responseData = {
       booking_id: bookingId,
       booking_record_id: createdBookingId,
@@ -318,30 +321,67 @@ module.exports = async (req, res) => {
         mock_type,
         location: mockExam.properties.location || 'Mississauga'
       },
-      remaining_credits: totalCredits - 1,
-      credit_deducted_from: creditField
+      credit_details: {
+        credit_field_deducted: creditField,
+        remaining_credits: newCreditValue,
+        credit_breakdown: {
+          specific_credits_before_deduction: specificCredits,
+          shared_credits_before_deduction: sharedCredits,
+          used_field: creditField
+        }
+      },
+      associations: {
+        results: associationResults,
+        warnings: associationWarnings,
+        critical_success: contactAssocSuccess && mockExamAssocSuccess
+      }
     };
 
-    res.status(201).json(createSuccessResponse(
-      responseData,
-      'Booking created successfully'
-    ));
+    // Log success with any warnings
+    if (associationWarnings.length > 0) {
+      console.log('⚠️ Booking successful with association warnings:', associationWarnings);
+    } else {
+      console.log('✅ Booking and all associations successful');
+    }
+
+    // FIXED: Correct parameter order - (data, message) not (message, data)
+    console.log('📤 API Response Structure:', {
+      success: true,
+      message: 'Booking created successfully',
+      data: {
+        booking_id: responseData.booking_id,
+        booking_record_id: responseData.booking_record_id,
+        // ... other data fields
+      }
+    });
+
+    return res.status(201).json(createSuccessResponse(responseData, 'Booking created successfully'));
 
   } catch (error) {
-    console.error('Error creating booking:', error);
+    console.error('❌ Booking creation error:', {
+      message: error.message,
+      status: error.status || 500,
+      code: error.code || 'INTERNAL_ERROR',
+      stack: error.stack
+    });
 
-    // If booking was created but something else failed, try to clean up
+    // Cleanup: If booking was created but subsequent steps failed, attempt cleanup
     if (bookingCreated && createdBookingId) {
+      console.log(`🧹 Attempting cleanup for booking ${createdBookingId} due to error: ${error.message}`);
       try {
         const hubspot = new HubSpotService();
         await hubspot.deleteBooking(createdBookingId);
-        console.log('Cleaned up failed booking:', createdBookingId);
+        console.log(`✅ Cleanup successful: Booking ${createdBookingId} deleted`);
       } catch (cleanupError) {
-        console.error('Failed to clean up booking:', cleanupError);
+        console.error(`❌ Cleanup failed for booking ${createdBookingId}:`, cleanupError.message);
+        // Don't throw cleanup error - return original error
       }
     }
 
     const statusCode = error.status || 500;
-    res.status(statusCode).json(createErrorResponse(error));
+    return res.status(statusCode).json(createErrorResponse(
+      error.message || 'Internal server error',
+      error.code || 'INTERNAL_ERROR'
+    ));
   }
 };

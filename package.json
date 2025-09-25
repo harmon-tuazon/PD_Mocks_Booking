@@ -5,7 +5,12 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon api/index.js",
-    "build": "echo 'Build complete - API ready'",
+    "build": "cd frontend && npm ci && npm run build",
+    "build:verify": "node scripts/verify-build.js",
+    "pre-deploy": "bash scripts/pre-deploy.sh",
+    "deploy": "npm run pre-deploy && vercel --prod && npm run post-deploy:verify",
+    "deploy:staging": "npm run pre-deploy && vercel && npm run post-deploy:verify",
+    "post-deploy:verify": "node scripts/post-deploy-verify.js",
     "build:client": "echo 'No client build needed - API only deployment'",
     "test": "jest",
     "test:integration": "jest tests/integration --runInBand",

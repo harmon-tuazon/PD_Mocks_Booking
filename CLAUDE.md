@@ -9,6 +9,9 @@ Simplicity should be a key goal in design. Choose straightforward solutions over
 YAGNI (You Aren't Gonna Need It)
 Avoid building functionality on speculation. Implement features only when they are needed, not when you anticipate they might be useful in the future.
 
+IF IT'S NOT BROKEN, DON'T FIX IT 
+Prioritize reusing old components, endpoints, functions, logic, etc. when they are available. Always refer to documentation\MOCKS_BOOKING_README.md, documentation\api, and documentation\frontend to check if there are already existing items we can reuse.
+
 ### Framework Core Components:
 1. **PRD-Driven Development**: Comprehensive plans ensuring 7-10 confidence scores
 2. **Specialized Developer Agents**: Each writes specific code types (NOT runtime functions)
@@ -53,6 +56,93 @@ Avoid building functionality on speculation. Implement features only when they a
 
 **⚠️ CRITICAL**: Never manually write code that MCPs can generate. Always check if an MCP can handle the task first!
 
+## 🚀 MONOREPO DEPLOYMENT GUIDELINES
+
+### CRITICAL: Complete Monorepo Deployment Protocol
+
+**IMPORTANT**: This is a monorepo with both frontend and backend components. ALWAYS ensure complete deployment of ALL changes.
+
+### Pre-Deployment Checklist (MANDATORY)
+```bash
+# 1. CRITICAL: Ensure you're in the monorepo ROOT directory (not frontend/)
+pwd  # Should show /path/to/mocks_booking (not /path/to/mocks_booking/frontend)
+
+# 2. Stage ALL changes across the entire monorepo
+git add .
+git status  # Verify all frontend AND backend files are staged
+
+# 3. Clean rebuild from monorepo root
+rm -rf frontend/dist frontend/node_modules/.vite
+npm run build  # This runs build from ROOT, not frontend/
+
+# 4. Verify build includes all recent changes
+ls -la frontend/dist/
+ls -la frontend/dist/assets/
+ls -la api/  # Verify API files exist
+
+# 5. Check that all new components are in the build
+grep -r "SidebarNavigation\|MainLayout\|BookingsCalendar" frontend/dist/assets/ || echo "⚠️ Components missing!"
+```
+
+### Deployment Commands (Use These EXACTLY)
+```bash
+# ⚠️ CRITICAL: Run from MONOREPO ROOT (not frontend/)
+pwd  # Verify you're in monorepo root before deploying
+
+# For Production Deployment (MANDATORY --force flag)
+vercel --prod --force
+
+# For Staging Deployment (MANDATORY --force flag)
+vercel --force
+
+# 🚨 NEVER use just 'vercel --prod' without --force flag
+# 🚨 NEVER deploy from frontend/ directory - always from ROOT
+# The --force flag ensures ALL files (frontend + backend) are re-uploaded
+```
+
+### Expected Upload Size Indicators
+```bash
+# ✅ GOOD: Large upload (200MB+) indicates complete monorepo deployment
+# ❌ BAD: Small upload (<10MB) indicates only frontend files
+
+# Example of successful deployment:
+# Uploading [====================] (226.4MB/226.4MB)  ← FULL MONOREPO
+#
+# Example of incomplete deployment:
+# Uploading [====================] (1.8MB/1.8MB)      ← FRONTEND ONLY
+```
+
+### Post-Deployment Verification (MANDATORY)
+```bash
+# 1. Check deployment includes all components
+curl -s [PRODUCTION_URL] | grep -q "SidebarNavigation\|vertical.*nav" || echo "❌ Navigation missing!"
+
+# 2. Verify API endpoints are working
+curl -s [PRODUCTION_URL]/api/health || echo "❌ API endpoints missing!"
+
+# 3. Test key functionality
+echo "✅ Manual verification required:"
+echo "- Login flow works"
+echo "- Navigation sidebar appears"
+echo "- Booking calendar shows statistics"
+echo "- Credit cards display correctly"
+```
+
+### Why This Matters
+- **Monorepo Structure**: Frontend built from `/frontend/` but served from root
+- **Vercel Caching**: May serve cached versions without --force flag
+- **Component Dependencies**: New React components need complete rebuild
+- **API Integration**: Both frontend AND backend files must deploy together
+
+### Deployment Troubleshooting
+If deployment seems incomplete:
+1. Run `rm -rf frontend/dist` and rebuild
+2. Use `vercel --prod --force --debug` for detailed logs
+3. Check Vercel dashboard for build errors
+4. Verify vercel.json configuration is correct
+
+**🔥 REMEMBER**: Always use `--force` flag for production deployments in this monorepo!
+
 ## 🔄 The 5-Phase Development Workflow
 
 **THIS IS YOUR PRIMARY WORKFLOW - USE IT FOR EVERY FEATURE:**
@@ -93,6 +183,9 @@ Simplicity is paramount in our HubSpot-centric architecture. Choose HubSpot's bu
 
 #### YAGNI (You Aren't Gonna Need It)
 Avoid building functionality on speculation. Our payment app has proven that minimal, focused features work best. Implement only what's needed now.
+
+IF IT'S NOT BROKEN, DON'T FIX IT 
+Prioritize reusing old components, endpoints, functions, logic, etc. when they are available. Always refer to documentation\MOCKS_BOOKING_README.md, documentation\api, and documentation\frontend to check if there are already existing items we can reuse.
 
 ### Design Principles
 
@@ -136,15 +229,7 @@ rg --files -g "*.js"
 3. **Property-Based State Management**
    - Use existing properties before creating new ones
    - Batch property updates for efficiency
-   - Validate property values match HubSpot enumerations
-
-4. **Record Linking is Sacred**
-   - Always maintain proper associations between objects
-   - Use association IDs to link related records
-   - Never modify or delete critical linking fields
-
-### Vercel Serverless Best Practices
-
+   - Validate property values match HubSpot enumeratio
 1. **Function Timeout Awareness**
    - Maximum 60 seconds per function execution
    - Design for quick response times
@@ -388,6 +473,10 @@ async function hubspotApiCall(fn, retries = 3) {
 5. **Blocking operations** - Everything must be async
 6. **Missing CRON_SECRET** - Always authenticate scheduled jobs
 7. **Not using dry-run mode** - Test before processing real data
+8. **React Component Structure Issues** - Ensure proper JSX syntax and component closure
+   - Never have return statements outside the main component function
+   - Remove duplicate code sections that create structural conflicts
+   - Ensure single export statement at component end
 
 ## Maintenance Notes
 

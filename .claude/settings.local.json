@@ -49,7 +49,15 @@
       "mcp__vercel__list_teams",
       "mcp__vercel__deploy_to_vercel",
       "mcp__vercel__get_deployment",
-      "mcp__serena__think_about_task_adherence"
+      "mcp__serena__think_about_task_adherence",
+      "Bash(npm test:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(node:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run pre-deploy:*)",
+      "Bash(git add:*)",
+      "Read(//c/**)"
     ],
     "deny": []
   }

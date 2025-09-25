@@ -169,14 +169,17 @@ const ExamSessionsList = () => {
           </p>
         </div>
 
-        {/* Credit Card */}
+        {/* User Info Cards - Credit Card Only */}
         {userSession && creditBreakdown && (
           <div className="mb-6">
-            <TokenCard
-              creditBreakdown={creditBreakdown}
-              mockType={mockType}
-              compact={true}
-            />
+            <div className="max-w-md">
+              <TokenCard
+                creditBreakdown={creditBreakdown}
+                mockType={mockType}
+                compact={true}
+                className=""
+              />
+            </div>
           </div>
         )}
 
@@ -272,18 +275,4 @@ const ExamSessionsList = () => {
     </div>
   );
 };
-
-// Define icon components
-const CalendarIcon = () => (
-  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-    <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-  </svg>
-);
-
-const LocationIcon = () => (
-  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-    <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-  </svg>
-);
-
 export default ExamSessionsList;

@@ -6,14 +6,16 @@ import ExamTypeSelector from './components/ExamTypeSelector';
 import ExamSessionsList from './components/ExamSessionsList';
 import BookingForm from './components/BookingForm';
 import BookingConfirmation from './components/BookingConfirmation';
+import MyBookings from './components/MyBookings';
 import ErrorBoundary from './components/ErrorBoundary';
+import MainLayout from './components/layout/MainLayout';
 import { ResponsiveLogo } from './components/shared/Logo';
 
 function App() {
   return (
     <Router>
       <ErrorBoundary>
-        <div className="min-h-screen">
+        <MainLayout>
           <Routes>
             {/* Root redirect to login */}
             <Route path="/" element={<Navigate to="/login" replace />} />
@@ -43,6 +45,13 @@ function App() {
               </ProtectedRoute>
             } />
 
+            {/* My Bookings page - requires authentication */}
+            <Route path="/my-bookings" element={
+              <ProtectedRoute>
+                <MyBookings />
+              </ProtectedRoute>
+            } />
+
             {/* Error pages - no authentication required */}
             <Route path="/book/error/insufficient-credits" element={<InsufficientCreditsError />} />
             <Route path="/book/error/exam-full" element={<ExamFullError />} />
@@ -51,7 +60,7 @@ function App() {
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </div>
+        </MainLayout>
       </ErrorBoundary>
     </Router>
   );

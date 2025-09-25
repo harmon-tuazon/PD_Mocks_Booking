@@ -3,6 +3,50 @@ const Joi = require('joi');
 // Validation schemas for different operations
 const schemas = {
   // Schema for credit validation
+  // Schema for authentication check
+  authCheck: Joi.object({
+    student_id: Joi.string()
+      .pattern(/^[A-Z0-9]+$/)
+      .required()
+      .messages({
+        'string.pattern.base': 'Student ID must contain only uppercase letters and numbers',
+        'any.required': 'Student ID is required'
+      }),
+    email: Joi.string()
+      .email()
+      .required()
+      .messages({
+        'string.email': 'Please enter a valid email address',
+        'any.required': 'Email is required'
+      })
+  }),
+
+  // Schema for booking cancellation (DELETE)
+  bookingCancellation: Joi.object({
+    student_id: Joi.string()
+      .pattern(/^[A-Z0-9]+$/)
+      .required()
+      .messages({
+        'string.pattern.base': 'Student ID must contain only uppercase letters and numbers',
+        'any.required': 'Student ID is required'
+      }),
+    email: Joi.string()
+      .email()
+      .required()
+      .messages({
+        'string.email': 'Please enter a valid email address',
+        'any.required': 'Email is required'
+      }),
+    reason: Joi.string()
+      .max(500)
+      .optional()
+      .allow('')
+      .messages({
+        'string.max': 'Cancellation reason cannot exceed 500 characters'
+      })
+  }),
+
+  // Schema for credit validation
   creditValidation: Joi.object({
     student_id: Joi.string()
       .pattern(/^[A-Z0-9]+$/)
@@ -38,11 +82,6 @@ const schemas = {
       .required()
       .messages({
         'any.required': 'Contact ID is required'
-      }),
-    enrollment_id: Joi.string()
-      .required()
-      .messages({
-        'any.required': 'Enrollment ID is required'
       }),
     student_id: Joi.string()
       .pattern(/^[A-Z0-9]+$/)
@@ -87,6 +126,52 @@ const schemas = {
   }),
 
   // Schema for fetching available exams
+  // Schema for listing bookings
+  bookingsList: Joi.object({
+    student_id: Joi.string()
+      .pattern(/^[A-Z0-9]+$/)
+      .required()
+      .messages({
+        'string.pattern.base': 'Student ID must contain only uppercase letters and numbers',
+        'any.required': 'Student ID is required'
+      }),
+    email: Joi.string()
+      .email()
+      .required()
+      .messages({
+        'string.email': 'Please enter a valid email address',
+        'any.required': 'Email is required'
+      }),
+    filter: Joi.string()
+      .valid('all', 'upcoming', 'past')
+      .optional()
+      .default('all')
+      .messages({
+        'any.only': 'Filter must be one of: all, upcoming, or past'
+      }),
+    page: Joi.number()
+      .integer()
+      .min(1)
+      .optional()
+      .default(1)
+      .messages({
+        'number.base': 'Page must be a number',
+        'number.integer': 'Page must be an integer',
+        'number.min': 'Page must be at least 1'
+      }),
+    limit: Joi.number()
+      .integer()
+      .min(1)
+      .max(100)
+      .optional()
+      .default(20)
+      .messages({
+        'number.base': 'Limit must be a number',
+        'number.integer': 'Limit must be an integer',
+        'number.min': 'Limit must be at least 1',
+        'number.max': 'Limit cannot exceed 100'
+      })
+  }),
   availableExams: Joi.object({
     mock_type: Joi.string()
       .valid('Situational Judgment', 'Clinical Skills', 'Mini-mock')

@@ -226,7 +226,6 @@ describe('Booking Flow Integration Tests', () => {
         body: {
           mock_exam_id: 'mock-exam-1',
           contact_id: 'contact-123',
-          enrollment_id: 'enrollment-123',
           student_id: 'STU123456',
           name: 'John Doe',
           email: 'test@example.com',
@@ -280,7 +279,6 @@ describe('Booking Flow Integration Tests', () => {
         body: {
           mock_exam_id: 'mock-exam-1',
           contact_id: 'contact-123',
-          enrollment_id: 'enrollment-123',
           student_id: 'STU123456',
           name: 'John Doe',
           email: 'test@example.com',
