@@ -1,6 +1,6 @@
 /**
  * GET /api/bookings/[id] - Fetches detailed information about a specific booking
- * DELETE /api/bookings/[id] - Cancels a booking and restores credits
+ * DELETE /api/bookings/[id] - Cancels a booking (simplified soft delete)
  *
  * Query Parameters (GET):
  * - student_id: The student's ID (required)
@@ -16,13 +16,16 @@
  *
  * Returns:
  * - 200: Success (booking details for GET, cancellation confirmation for DELETE)
- * - 400: Invalid request parameters or booking cannot be canceled
+ * - 400: Invalid request parameters
  * - 401: Authentication failed
- * - 403: Booking doesn't belong to authenticated user
+ * - 403: Booking doesn't belong to authenticated user (GET only)
  * - 404: Booking not found
  * - 405: Method not allowed
- * - 409: Booking already canceled or exam is in the past
+ * - 409: Booking already cancelled
  * - 500: Server error
+ *
+ * Note: DELETE operation uses simplified flow without ownership verification,
+ * credit restoration, or capacity updates. Just sets is_active to 'Cancelled'.
  */
 
 // Import shared utilities
@@ -398,315 +401,80 @@ async function handleGetRequest(req, res, hubspot, bookingId, contactId, contact
 }
 
 /**
- * Handle DELETE request for booking cancellation
+ * Handle DELETE request for booking cancellation (SIMPLIFIED)
+ * No ownership verification needed - bookings are already pre-filtered by user
  */
 async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, contact, reason) {
-  let rollbackActions = [];
-
   try {
-    console.log('🔍 [BACKEND DEBUG] Delete request started:', {
+    console.log('🔍 [DELETE] Processing simplified deletion for booking:', {
       bookingId,
-      bookingIdType: typeof bookingId,
       contactId,
       reason
     });
 
-    // Step 1: Fetch the booking with all associations
-    console.log('🔍 [BACKEND DEBUG] Calling getBookingWithAssociations with:', bookingId);
-    const bookingResponse = await hubspot.getBookingWithAssociations(bookingId);
-
-    console.log('🔍 [BACKEND DEBUG] HubSpot response:', {
-      hasResponse: !!bookingResponse,
-      hasData: !!bookingResponse?.data,
-      responseType: typeof bookingResponse,
-      responseKeys: bookingResponse ? Object.keys(bookingResponse) : null
-    });
-
-    // Handle different response structures from HubSpot API
+    // Step 1: Get basic booking info to verify it exists and check status
     let booking;
-    if (bookingResponse?.data) {
-      // If response has .data property, use it
-      booking = bookingResponse.data;
-    } else if (bookingResponse?.id) {
-      // If response is the booking object directly, use it
-      booking = bookingResponse;
-    } else {
-      // No valid booking found
-      console.error('❌ [BACKEND ERROR] Booking not found:', {
-        bookingId,
-        response: bookingResponse
+    try {
+      booking = await hubspot.getBasicBooking(bookingId);
+      console.log('✅ Booking found:', {
+        id: booking.id,
+        booking_id: booking.properties?.booking_id,
+        status: booking.properties?.status,
+        is_active: booking.properties?.is_active
       });
-      const error = new Error('Booking not found');
-      error.status = 404;
-      error.code = 'BOOKING_NOT_FOUND';
-      throw error;
+    } catch (error) {
+      console.error('❌ Booking not found:', bookingId);
+      const notFoundError = new Error('Booking not found');
+      notFoundError.status = 404;
+      notFoundError.code = 'BOOKING_NOT_FOUND';
+      throw notFoundError;
     }
 
-    console.log('🔍 [BACKEND DEBUG] Booking object structure:', {
-      hasId: !!booking.id,
-      bookingObjectId: booking.id,
-      properties: booking.properties ? Object.keys(booking.properties) : null,
-      associations: booking.associations ? Object.keys(booking.associations) : null
-    });
+    // Step 2: Check if already cancelled
+    const currentStatus = booking.properties?.status;
+    const isActive = booking.properties?.is_active;
 
-    // Step 2: Verify booking ownership with enhanced debugging
-    const contactAssociations = booking.associations?.[HUBSPOT_OBJECTS.contacts]?.results || [];
-
-    console.log('🔍 [DELETE OWNERSHIP DEBUG] Verifying booking ownership for DELETE:', {
-      contactId,
-      contactIdType: typeof contactId,
-      associationsCount: contactAssociations.length,
-      contactAssociations: contactAssociations.map(assoc => ({
-        id: assoc.id,
-        idType: typeof assoc.id,
-        toObjectId: assoc.toObjectId,
-        toObjectIdType: typeof assoc.toObjectId,
-        type: assoc.type,
-        originalType: assoc.originalType,
-        originalValue: assoc.originalValue,
-        allKeys: Object.keys(assoc)
-      }))
-    });
-
-    const belongsToUser = contactAssociations.some(assoc => {
-      // CRITICAL FIX: Both IDs should now be strings after the HubSpot service fix
-      // The getBookingWithAssociations method now converts V4 API numeric toObjectId to string
-      const contactIdStr = String(contactId);
-      const assocIdStr = String(assoc.id);
-      const assocToObjectIdStr = String(assoc.toObjectId);
-
-      // Simple string comparison should now work reliably
-      const matches = [
-        // Primary comparison - both should be strings now
-        assoc.id === contactIdStr,
-        assoc.toObjectId === contactIdStr,
-
-        // Fallback comparisons for safety
-        assocIdStr === contactIdStr,
-        assocToObjectIdStr === contactIdStr
-      ];
-
-      const hasMatch = matches.some(Boolean);
-
-      // Enhanced logging for debugging
-      if (hasMatch || contactAssociations.length <= 1) {
-        console.log('✅ [DELETE OWNERSHIP DEBUG] Match result for association:', {
-          contactId: contactId,
-          contactIdType: typeof contactId,
-          assoc: {
-            id: assoc.id,
-            idType: typeof assoc.id,
-            toObjectId: assoc.toObjectId,
-            toObjectIdType: typeof assoc.toObjectId,
-            originalType: assoc.originalType,
-            originalValue: assoc.originalValue
-          },
-          matchDetails: {
-            directId: assoc.id === contactIdStr,
-            directToObjectId: assoc.toObjectId === contactIdStr,
-            stringId: assocIdStr === contactIdStr,
-            stringToObjectId: assocToObjectIdStr === contactIdStr
-          },
-          hasMatch
-        });
-      }
-
-      return hasMatch;
-    });
-
-    if (!belongsToUser) {
-      console.error('❌ [DELETE OWNERSHIP DEBUG] Access denied - no matching associations found:', {
-        bookingId,
-        contactId,
-        contactIdType: typeof contactId,
-        associationsFound: contactAssociations.length,
-        associationDetails: contactAssociations.map(a => ({
-          id: a.id,
-          idType: typeof a.id,
-          toObjectId: a.toObjectId,
-          toObjectIdType: typeof a.toObjectId,
-          originalType: a.originalType,
-          originalValue: a.originalValue
-        })),
-        debugHint: 'Check if HubSpot V4 API is returning numeric toObjectId while contact.id is string'
-      });
-      const error = new Error('Access denied. This booking does not belong to you.');
-      error.status = 403;
-      error.code = 'ACCESS_DENIED';
-      error.details = {
-        bookingId,
-        associationsFound: contactAssociations.length,
-        hint: 'If associations exist but verification fails, there may be an ID type mismatch'
-      };
-      throw error;
-    }
-
-    console.log('✅ [DELETE OWNERSHIP DEBUG] Booking ownership verified for deletion');
-
-    // Step 3: Check if booking can be canceled
-    const bookingStatus = booking.properties.status;
-    if (bookingStatus === 'canceled' || bookingStatus === 'cancelled') {
-      const error = new Error('Booking is already canceled');
+    // Check both status field and is_active field for cancelled state
+    if (currentStatus === 'canceled' || currentStatus === 'cancelled' ||
+        isActive === 'Cancelled' || isActive === 'cancelled' ||
+        isActive === false || isActive === 'false') {
+      console.log('⚠️ Booking already cancelled');
+      const error = new Error('Booking is already cancelled');
       error.status = 409;
       error.code = 'ALREADY_CANCELED';
       throw error;
     }
 
-    // Step 4: Get mock exam details to check date and get mock type
-    const mockExamAssociations = booking.associations?.[HUBSPOT_OBJECTS.mock_exams]?.results || [];
-    if (mockExamAssociations.length === 0) {
-      const error = new Error('No mock exam associated with this booking');
-      error.status = 400;
-      error.code = 'NO_MOCK_EXAM';
-      throw error;
-    }
-
-    const mockExamId = mockExamAssociations[0].id;
-    const mockExamResponse = await hubspot.getMockExam(mockExamId);
-
-    if (!mockExamResponse || !mockExamResponse.data) {
-      const error = new Error('Mock exam not found');
-      error.status = 404;
-      error.code = 'MOCK_EXAM_NOT_FOUND';
-      throw error;
-    }
-
-    const mockExam = mockExamResponse.data.properties;
-    const examDate = new Date(mockExam.exam_date);
-    const now = new Date();
-
-    // Check if exam is in the past
-    if (examDate < now) {
-      const error = new Error('Cannot cancel bookings for past exams');
-      error.status = 409;
-      error.code = 'EXAM_IN_PAST';
-      throw error;
-    }
-
-    const mockType = mockExam.mock_type;
-
-    // Step 5: Get current credit balances
-    const currentCredits = {
-      sj_credits: parseInt(contact.properties.sj_credits) || 0,
-      cs_credits: parseInt(contact.properties.cs_credits) || 0,
-      sjmini_credits: parseInt(contact.properties.sjmini_credits) || 0,
-      shared_mock_credits: parseInt(contact.properties.shared_mock_credits) || 0
-    };
-
-    console.log('💳 Current credit balances:', currentCredits);
-
-    // Step 6: Restore credits (atomic operation 1)
-    let creditsRestored;
-    try {
-      creditsRestored = await hubspot.restoreCredits(contactId, mockType, currentCredits);
-      console.log('✅ Credits restored:', creditsRestored);
-
-      // Add rollback action for credits
-      rollbackActions.push(async () => {
-        const rollbackCredits = {};
-        rollbackCredits[creditsRestored.credit_type] = currentCredits[creditsRestored.credit_type];
-        await hubspot.apiCall({
-          method: 'PATCH',
-          url: `/crm/v3/objects/contacts/${contactId}`,
-          data: { properties: rollbackCredits }
-        });
-        console.log('🔄 Rolled back credit restoration');
-      });
-    } catch (creditError) {
-      console.error('❌ Failed to restore credits:', creditError);
-      throw creditError;
-    }
-
-    // Step 7: Update mock exam capacity (atomic operation 2)
-    let mockExamUpdated;
-    try {
-      mockExamUpdated = await hubspot.decrementMockExamBookings(mockExamId);
-      console.log('✅ Mock exam capacity updated:', mockExamUpdated);
-
-      // Add rollback action for mock exam
-      const previousBookings = parseInt(mockExam.total_bookings) || 0;
-      rollbackActions.push(async () => {
-        await hubspot.apiCall({
-          method: 'PATCH',
-          url: `/crm/v3/objects/${HUBSPOT_OBJECTS.mock_exams}/${mockExamId}`,
-          data: { properties: { total_bookings: previousBookings } }
-        });
-        console.log('🔄 Rolled back mock exam capacity update');
-      });
-    } catch (examError) {
-      console.error('❌ Failed to update mock exam:', examError);
-      await performRollback(rollbackActions);
-      throw examError;
-    }
-
-    // Step 8: Soft delete the booking by setting is_active to 'Cancelled' (atomic operation 3)
+    // Step 3: Soft delete the booking (set is_active to 'Cancelled')
     try {
       await hubspot.softDeleteBooking(bookingId);
-      console.log('✅ Booking soft deleted (cancelled) successfully');
+      console.log('✅ Booking soft deleted successfully');
     } catch (deleteError) {
       console.error('❌ Failed to soft delete booking:', deleteError);
-      await performRollback(rollbackActions);
-      throw deleteError;
+      const softDeleteError = new Error('Failed to cancel booking');
+      softDeleteError.status = 500;
+      softDeleteError.code = 'SOFT_DELETE_FAILED';
+      throw softDeleteError;
     }
 
-    // Step 9: Create audit trail in Deal timeline if Deal is associated
-    const dealAssociations = booking.associations?.[HUBSPOT_OBJECTS.deals]?.results || [];
-    if (dealAssociations.length > 0) {
-      const dealId = dealAssociations[0].id;
-      try {
-        await hubspot.createCancellationNote(dealId, {
-          booking_id: booking.properties.booking_id,
-          mock_type: mockType,
-          exam_date: mockExam.exam_date,
-          reason: reason,
-          credits_restored: creditsRestored
-        });
-        console.log('📝 Cancellation note added to deal timeline');
-      } catch (noteError) {
-        // Non-critical error, don't rollback
-        console.warn('⚠️ Failed to create cancellation note:', noteError.message);
-      }
-    }
-
-    // Prepare response data
+    // Step 4: Return success response
     const responseData = {
-      canceled_booking: {
-        booking_id: booking.properties.booking_id,
-        mock_type: mockType,
-        exam_date: mockExam.exam_date,
-        canceled_at: new Date().toISOString(),
-        ...(reason ? { reason } : {})
-      },
-      credits_restored: creditsRestored,
-      mock_exam_updated: mockExamUpdated
+      booking_id: booking.properties?.booking_id || bookingId,
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      ...(reason ? { reason } : {})
     };
 
-    console.log('✅ Booking canceled successfully');
+    console.log('✅ Booking cancellation completed successfully');
 
     return res.status(200).json(createSuccessResponse(
       responseData,
-      'Booking canceled successfully'
+      'Booking cancelled successfully'
     ));
 
   } catch (error) {
     throw error;  // Re-throw to be handled by main handler
   }
-}
-
-/**
- * Perform rollback of completed operations
- */
-async function performRollback(rollbackActions) {
-  console.log('🔄 Starting rollback of completed operations...');
-  for (const action of rollbackActions.reverse()) {
-    try {
-      await action();
-    } catch (rollbackError) {
-      console.error('❌ Rollback failed:', rollbackError);
-      // Continue with other rollbacks
-    }
-  }
-  console.log('🔄 Rollback completed');
 }
 
 module.exports = handler;

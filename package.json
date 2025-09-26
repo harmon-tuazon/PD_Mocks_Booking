@@ -16,6 +16,7 @@
     "test:integration": "jest tests/integration --runInBand",
     "test:e2e": "jest tests/e2e --runInBand",
     "test:coverage": "jest --coverage",
+    "test:delete:simplified": "node tests/manual/test-simplified-delete.js",
     "lint": "echo 'Linting complete'",
     "verify:hubspot-schema": "node helper_scripts/fetch-hubspot-schema-simple.js",
     "test:load": "echo 'Load testing complete'",

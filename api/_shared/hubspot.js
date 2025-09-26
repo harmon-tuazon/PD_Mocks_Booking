@@ -342,6 +342,24 @@ class HubSpotService {
   }
 
   /**
+   * Get basic booking information without associations (simplified)
+   * @param {string} bookingId - The booking ID
+   * @returns {Promise<object>} Basic booking object
+   */
+  async getBasicBooking(bookingId) {
+    const properties = [
+      'booking_id',
+      'status',
+      'is_active',
+      'name',
+      'email'
+    ].join(',');
+
+    const result = await this.apiCall('GET', `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}?properties=${properties}`);
+    return result.data || result;
+  }
+
+  /**
    * Get active bookings count for a mock exam by querying actual associations
    * This ensures we only count non-deleted bookings
    */
