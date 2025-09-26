@@ -188,26 +188,38 @@ const ExamSessionsList = () => {
           <div className="text-small font-body text-gray-600">
             Found {exams.length} available session{exams.length !== 1 ? 's' : ''}
           </div>
-          <div className="flex bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center space-x-2">
             <button
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1 rounded-md text-sm font-subheading font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
                 viewMode === 'list'
-                  ? 'bg-white text-navy-900 shadow-sm border border-primary-200'
-                  : 'text-gray-600 hover:text-navy-700'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              List View
+              <span className="flex items-center">
+                <svg className="w-4 h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+                <span className="hidden sm:inline">List View</span>
+                <span className="sm:hidden">List</span>
+              </span>
             </button>
             <button
               onClick={() => setViewMode('calendar')}
-              className={`px-3 py-1 rounded-md text-sm font-subheading font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
                 viewMode === 'calendar'
-                  ? 'bg-white text-navy-900 shadow-sm border border-primary-200'
-                  : 'text-gray-600 hover:text-navy-700'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Calendar View
+              <span className="flex items-center">
+                <svg className="w-4 h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="hidden sm:inline">Calendar View</span>
+                <span className="sm:hidden">Calendar</span>
+              </span>
             </button>
           </div>
         </div>

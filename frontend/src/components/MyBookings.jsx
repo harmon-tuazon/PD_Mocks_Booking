@@ -35,11 +35,15 @@ const MyBookings = () => {
 
   // UI state
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
-  const [filter, setFilter] = useState('all'); // 'all' | 'upcoming' | 'past'
+  const [filter, setFilter] = useState('all'); // 'all' | 'upcoming' | 'past' | 'cancelled'
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalBookings, setTotalBookings] = useState(0);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Sorting state
+  const [sortField, setSortField] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
 
   // Delete modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -134,10 +138,13 @@ const MyBookings = () => {
     setError('');
 
     try {
+      // For cancelled filter, fetch 'all' bookings since we'll filter client-side
+      const apiFilter = filter === 'cancelled' ? 'all' : filter;
+
       const response = await apiService.bookings.list({
         student_id: studentId,
         email: email,
-        filter: filter, // Changed from 'status' to 'filter' to match API expectation
+        filter: apiFilter, // Use adjusted filter for API
         page: page,
         limit: ITEMS_PER_PAGE
       });
@@ -367,6 +374,75 @@ const MyBookings = () => {
   // This function properly handles ISO timestamps from HubSpot
   const formatBookingTimeRange = (booking) => {
     return apiFormatTimeRange(booking);
+  };
+
+  // Sorting function
+  const sortBookings = (bookingsToSort, field, direction) => {
+    return [...bookingsToSort].sort((a, b) => {
+      let aValue, bValue;
+
+      switch (field) {
+        case 'booking_number':
+          aValue = a.booking_number || '';
+          bValue = b.booking_number || '';
+          break;
+        case 'exam_type':
+          aValue = a.mock_type || '';
+          bValue = b.mock_type || '';
+          break;
+        case 'date_time':
+          aValue = new Date(a.exam_date || '1970-01-01');
+          bValue = new Date(b.exam_date || '1970-01-01');
+          break;
+        case 'location':
+          aValue = a.location || '';
+          bValue = b.location || '';
+          break;
+        case 'status':
+          // Custom status ordering: scheduled -> completed -> cancelled
+          const statusOrder = { 'scheduled': 1, 'completed': 2, 'cancelled': 3, 'no_show': 4 };
+          aValue = statusOrder[getBookingStatus(a)] || 5;
+          bValue = statusOrder[getBookingStatus(b)] || 5;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  // Handle sort click function
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort icon component
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) {
+      return (
+        <svg className="w-4 h-4 ml-1 text-gray-400 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      );
+    }
+
+    return sortDirection === 'asc' ? (
+      <svg className="w-4 h-4 ml-1 text-blue-600 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 ml-1 text-blue-600 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
   };
 
   // Get booking status badge
@@ -773,8 +849,55 @@ const MyBookings = () => {
                 >
                   Past
                 </button>
+                <button
+                  onClick={() => setFilter('cancelled')}
+                  className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 whitespace-nowrap ${
+                    filter === 'cancelled'
+                      ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Cancelled
+                </button>
               </div>
             </div>
+
+            {/* Mobile Sorting Dropdown - Only show in list view */}
+            {viewMode === 'list' && (
+              <div className="md:hidden">
+                <label htmlFor="sort-mobile" className="block text-xs font-medium text-gray-700 mb-1">
+                  Sort by
+                </label>
+                <select
+                  id="sort-mobile"
+                  className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                  value={sortField ? `${sortField}_${sortDirection}` : ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) {
+                      setSortField(null);
+                      setSortDirection('asc');
+                    } else {
+                      const [field, direction] = value.split('_');
+                      setSortField(field);
+                      setSortDirection(direction);
+                    }
+                  }}
+                >
+                  <option value="">Default Order</option>
+                  <option value="booking_number_asc">Booking # (A-Z)</option>
+                  <option value="booking_number_desc">Booking # (Z-A)</option>
+                  <option value="exam_type_asc">Exam Type (A-Z)</option>
+                  <option value="exam_type_desc">Exam Type (Z-A)</option>
+                  <option value="date_time_asc">Date (Oldest First)</option>
+                  <option value="date_time_desc">Date (Newest First)</option>
+                  <option value="location_asc">Location (A-Z)</option>
+                  <option value="location_desc">Location (Z-A)</option>
+                  <option value="status_asc">Status (Scheduled First)</option>
+                  <option value="status_desc">Status (Cancelled First)</option>
+                </select>
+              </div>
+            )}
 
           </div>
         </div>
@@ -810,30 +933,59 @@ const MyBookings = () => {
           </div>
         )}
 
-        {!loading && !error && bookings.length === 0 && (
-          <div className="text-center py-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No bookings found</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              You haven't made any bookings yet.
-            </p>
-            <div className="mt-6">
-                <button
-                  onClick={() => navigate('/book/exam-types')}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                >
-                  <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Book Your First Exam
-                </button>
-              </div>
-          </div>
-        )}
+        {/* Client-side filtering for cancelled bookings */}
+        {(() => {
+          // Filter bookings based on the selected filter
+          const getFilteredBookings = (bookingList, filterType) => {
+            if (filterType === 'cancelled') {
+              return bookingList.filter(booking => {
+                const status = getBookingStatus(booking);
+                return status === 'cancelled';
+              });
+            }
+            // For other filters, use all bookings as server already filtered them
+            return bookingList;
+          };
 
-        {!loading && !error && bookings.length > 0 && (
+          // Apply filtering
+          const displayBookings = getFilteredBookings(bookings, filter);
+          const cancelledCount = bookings.filter(booking => getBookingStatus(booking) === 'cancelled').length;
+
+          // Check if there are no bookings to display after filtering
+          if (!loading && !error && displayBookings.length === 0) {
+            return (
+              <div className="text-center py-12">
+                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">
+                  {filter === 'cancelled' ? 'No cancelled bookings' : 'No bookings found'}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {filter === 'cancelled'
+                    ? "You don't have any cancelled bookings."
+                    : "You haven't made any bookings yet."}
+                </p>
+                {filter !== 'cancelled' && (
+                  <div className="mt-6">
+                    <button
+                      onClick={() => navigate('/book/exam-types')}
+                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    >
+                      <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Book Your First Exam
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Display bookings if there are any after filtering
+          if (!loading && !error && displayBookings.length > 0) {
+            return (
           <>
             {viewMode === 'list' ? (
               <>
@@ -843,20 +995,50 @@ const MyBookings = () => {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Booking #
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            onClick={() => handleSort('booking_number')}
+                          >
+                            <div className="flex items-center">
+                              Booking #
+                              <SortIcon field="booking_number" />
+                            </div>
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Exam Type
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            onClick={() => handleSort('exam_type')}
+                          >
+                            <div className="flex items-center">
+                              Exam Type
+                              <SortIcon field="exam_type" />
+                            </div>
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Date & Time
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            onClick={() => handleSort('date_time')}
+                          >
+                            <div className="flex items-center">
+                              Date & Time
+                              <SortIcon field="date_time" />
+                            </div>
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Location
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            onClick={() => handleSort('location')}
+                          >
+                            <div className="flex items-center">
+                              Location
+                              <SortIcon field="location" />
+                            </div>
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
+                          <th
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            onClick={() => handleSort('status')}
+                          >
+                            <div className="flex items-center">
+                              Status
+                              <SortIcon field="status" />
+                            </div>
                           </th>
                           <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Actions
@@ -864,7 +1046,13 @@ const MyBookings = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {bookings.map((booking) => (
+                        {(() => {
+                          // Apply sorting to the display bookings
+                          const sortedBookings = sortField
+                            ? sortBookings(displayBookings, sortField, sortDirection)
+                            : displayBookings;
+
+                          return sortedBookings.map((booking) => (
                           <tr key={booking.id} className="hover:bg-gray-50 transition-colors duration-200">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-medium text-primary-900">
@@ -906,7 +1094,8 @@ const MyBookings = () => {
                               )}
                             </td>
                           </tr>
-                        ))}
+                          ));
+                        })()}
                       </tbody>
                     </table>
                   </div>
@@ -914,15 +1103,22 @@ const MyBookings = () => {
 
                 {/* Mobile Card View */}
                 <div className="md:hidden space-y-4">
-                  {bookings.map((booking) => (
-                    <MobileBookingCard key={booking.id} booking={booking} />
-                  ))}
+                  {(() => {
+                    // Apply sorting to the display bookings for mobile view
+                    const sortedBookings = sortField
+                      ? sortBookings(displayBookings, sortField, sortDirection)
+                      : displayBookings;
+
+                    return sortedBookings.map((booking) => (
+                      <MobileBookingCard key={booking.id} booking={booking} />
+                    ));
+                  })()}
                 </div>
               </>
             ) : (
               /* Calendar View */
               <BookingsCalendarView
-                bookings={bookings}
+                bookings={displayBookings}
                 onCancelBooking={handleCancelBooking}
                 isLoading={loading}
                 error={error}
@@ -1010,8 +1206,13 @@ const MyBookings = () => {
                 </div>
               </div>
             )}
-          </>
-        )}
+              </>
+            );
+          }
+
+          // Default return for when loading or error
+          return null;
+        })()}
       </div>
 
       {/* Delete Booking Modal */}

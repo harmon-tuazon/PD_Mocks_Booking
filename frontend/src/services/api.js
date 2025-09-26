@@ -222,8 +222,8 @@ export const formatTime = (dateString) => {
   return date.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
-    timeZone: 'America/Toronto'
+    hour12: true
+    // Use user's local timezone instead of hardcoded Toronto
   });
 };
 // Format time range for exam sessions (start_time - end_time)

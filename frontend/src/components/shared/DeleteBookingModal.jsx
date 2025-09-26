@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { FiAlertCircle, FiX, FiCalendar, FiClock, FiMapPin, FiRefreshCw } from 'react-icons/fi';
+import { formatTimeRange } from '../../services/api';
 
 const DeleteBookingModal = ({
   isOpen,
@@ -29,19 +30,6 @@ const DeleteBookingModal = ({
     }
   };
 
-  // Format time for display
-  const formatTime = (timeString) => {
-    if (!timeString) return '';
-    try {
-      const [hours, minutes] = timeString.split(':');
-      const hour = parseInt(hours);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-      return `${displayHour}:${minutes} ${ampm}`;
-    } catch (error) {
-      return timeString;
-    }
-  };
 
   // Get exam date from booking (handle different field names)
   const getExamDate = (booking) => {
@@ -49,11 +37,6 @@ const DeleteBookingModal = ({
     return booking.examDate || booking.exam_date || booking.date;
   };
 
-  // Get exam time from booking (handle different field names)
-  const getExamTime = (booking) => {
-    if (!booking) return null;
-    return booking.examTime || booking.exam_time || booking.start_time || booking.time;
-  };
 
   // Get exam type from booking (handle different field names)
   const getExamType = (booking) => {
@@ -111,7 +94,6 @@ const DeleteBookingModal = ({
   if (!isOpen || !booking) return null;
 
   const examDate = getExamDate(booking);
-  const examTime = getExamTime(booking);
   const examType = getExamType(booking);
   const location = getLocation(booking);
   const creditsToRestore = getCreditsToRestore(booking);
@@ -132,7 +114,7 @@ const DeleteBookingModal = ({
         {/* Modal panel */}
         <div
           ref={modalRef}
-          className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+          className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-sm sm:w-full"
         >
           {/* Header */}
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -159,15 +141,20 @@ const DeleteBookingModal = ({
                     </div>
 
                     {/* Date and Time */}
-                    {(examDate || examTime) && (
+                    {examDate && (
                       <div className="flex items-start gap-2 text-sm text-gray-600">
                         <FiCalendar className="w-4 h-4 flex-shrink-0 mt-0.5" />
                         <div>
-                          {examDate && <div>{formatDate(examDate)}</div>}
-                          {examTime && <div>{formatTime(examTime)}</div>}
+                          <div>{formatDate(examDate)}</div>
                         </div>
                       </div>
                     )}
+
+                    {/* Time Range */}
+                    <div className="flex items-start gap-2 text-sm text-gray-600">
+                      <FiClock className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <div>{formatTimeRange(booking)}</div>
+                    </div>
 
                     {/* Location */}
                     <div className="flex items-start gap-2 text-sm text-gray-600">

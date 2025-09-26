@@ -1,6 +1,6 @@
 /**
  * GET /api/bookings/[id] - Fetches detailed information about a specific booking
- * DELETE /api/bookings/[id] - Cancels a booking (simplified soft delete)
+ * DELETE /api/bookings/[id] - Cancels a booking with enhanced tracking
  *
  * Query Parameters (GET):
  * - student_id: The student's ID (required)
@@ -24,8 +24,11 @@
  * - 409: Booking already cancelled
  * - 500: Server error
  *
- * Note: DELETE operation uses simplified flow without ownership verification,
- * credit restoration, or capacity updates. Just sets is_active to 'Cancelled'.
+ * DELETE operation enhancements:
+ * - Creates cancellation note on Contact's timeline
+ * - Removes association between Booking and Mock Exam
+ * - Performs soft delete (sets is_active to 'Cancelled')
+ * - Returns detailed actions_completed status
  */
 
 // Import shared utilities
@@ -401,26 +404,28 @@ async function handleGetRequest(req, res, hubspot, bookingId, contactId, contact
 }
 
 /**
- * Handle DELETE request for booking cancellation (SIMPLIFIED)
- * No ownership verification needed - bookings are already pre-filtered by user
+ * Handle DELETE request for booking cancellation (ENHANCED)
+ * Includes note creation and association removal
  */
 async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, contact, reason) {
   try {
-    console.log('🔍 [DELETE] Processing simplified deletion for booking:', {
+    console.log('🗑️ [DELETE] Processing enhanced booking cancellation:', {
       bookingId,
       contactId,
       reason
     });
 
-    // Step 1: Get basic booking info to verify it exists and check status
+    // Step 1: Get comprehensive booking data with associations
     let booking;
     try {
-      booking = await hubspot.getBasicBooking(bookingId);
-      console.log('✅ Booking found:', {
-        id: booking.id,
-        booking_id: booking.properties?.booking_id,
-        status: booking.properties?.status,
-        is_active: booking.properties?.is_active
+      booking = await hubspot.getBookingWithAssociations(bookingId);
+      console.log('✅ Booking found with associations:', {
+        id: booking.id || booking.data?.id,
+        booking_id: booking.data?.properties?.booking_id || booking.properties?.booking_id,
+        status: booking.data?.properties?.status || booking.properties?.status,
+        is_active: booking.data?.properties?.is_active || booking.properties?.is_active,
+        hasContactAssoc: !!(booking.associations?.[HUBSPOT_OBJECTS.contacts]?.results?.length),
+        hasMockExamAssoc: !!(booking.associations?.[HUBSPOT_OBJECTS.mock_exams]?.results?.length)
       });
     } catch (error) {
       console.error('❌ Booking not found:', bookingId);
@@ -430,9 +435,13 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       throw notFoundError;
     }
 
+    // Normalize booking data structure
+    const bookingData = booking.data || booking;
+    const bookingProperties = bookingData.properties || {};
+
     // Step 2: Check if already cancelled
-    const currentStatus = booking.properties?.status;
-    const isActive = booking.properties?.is_active;
+    const currentStatus = bookingProperties.status;
+    const isActive = bookingProperties.is_active;
 
     // Check both status field and is_active field for cancelled state
     if (currentStatus === 'canceled' || currentStatus === 'cancelled' ||
@@ -445,10 +454,82 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       throw error;
     }
 
-    // Step 3: Soft delete the booking (set is_active to 'Cancelled')
+    // Step 3: Get Mock Exam details if associated
+    let mockExamId = null;
+    let mockExamDetails = null;
+
+    const mockExamAssociations = booking.associations?.[HUBSPOT_OBJECTS.mock_exams]?.results || [];
+    if (mockExamAssociations.length > 0) {
+      mockExamId = mockExamAssociations[0].id || mockExamAssociations[0].toObjectId;
+      console.log(`📚 Found Mock Exam association: ${mockExamId}`);
+
+      try {
+        const mockExamResponse = await hubspot.getMockExam(mockExamId);
+        if (mockExamResponse?.data) {
+          mockExamDetails = mockExamResponse.data.properties;
+          console.log('✅ Mock Exam details retrieved:', {
+            id: mockExamId,
+            mock_type: mockExamDetails.mock_type,
+            exam_date: mockExamDetails.exam_date,
+            location: mockExamDetails.location
+          });
+        }
+      } catch (examError) {
+        console.warn('⚠️ Failed to fetch Mock Exam details:', examError.message);
+        // Continue without Mock Exam details
+      }
+    }
+
+    // Step 4: Prepare cancellation data for note
+    const cancellationData = {
+      booking_id: bookingProperties.booking_id || bookingData.id,
+      mock_type: mockExamDetails?.mock_type || bookingProperties.mock_type || 'Mock Exam',
+      exam_date: mockExamDetails?.exam_date || bookingProperties.exam_date,
+      location: mockExamDetails?.location || bookingProperties.location || 'Location TBD',
+      name: bookingProperties.name || contact.properties?.firstname + ' ' + contact.properties?.lastname,
+      email: bookingProperties.email || contact.properties?.email,
+      reason: reason || 'User requested cancellation'
+    };
+
+    console.log('📝 Cancellation data prepared:', cancellationData);
+
+    // Step 5: Create cancellation note on Contact timeline
+    let noteCreated = false;
+    if (contactId) {
+      try {
+        await hubspot.createBookingCancellationNote(contactId, cancellationData);
+        console.log(`✅ Cancellation note created for Contact ${contactId}`);
+        noteCreated = true;
+      } catch (noteError) {
+        console.error('❌ Failed to create cancellation note:', noteError.message);
+        // Continue with deletion even if note creation fails
+      }
+    } else {
+      console.warn('⚠️ No Contact ID available for note creation');
+    }
+
+    // Step 6: Remove Mock Exam association if it exists
+    let associationRemoved = false;
+    if (mockExamId) {
+      try {
+        await hubspot.removeAssociation(
+          HUBSPOT_OBJECTS.bookings,
+          bookingId,
+          HUBSPOT_OBJECTS.mock_exams,
+          mockExamId
+        );
+        console.log(`✅ Removed association between Booking ${bookingId} and Mock Exam ${mockExamId}`);
+        associationRemoved = true;
+      } catch (associationError) {
+        console.error('❌ Failed to remove Mock Exam association:', associationError.message);
+        // Continue with deletion even if association removal fails
+      }
+    }
+
+    // Step 7: Perform soft delete (mark as cancelled)
     try {
       await hubspot.softDeleteBooking(bookingId);
-      console.log('✅ Booking soft deleted successfully');
+      console.log(`✅ Booking ${bookingId} marked as cancelled`);
     } catch (deleteError) {
       console.error('❌ Failed to soft delete booking:', deleteError);
       const softDeleteError = new Error('Failed to cancel booking');
@@ -457,15 +538,20 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       throw softDeleteError;
     }
 
-    // Step 4: Return success response
+    // Step 8: Return success response with detailed actions
     const responseData = {
-      booking_id: booking.properties?.booking_id || bookingId,
+      booking_id: bookingProperties.booking_id || bookingId,
       status: 'cancelled',
       cancelled_at: new Date().toISOString(),
+      actions_completed: {
+        soft_delete: true,
+        note_created: noteCreated,
+        association_removed: associationRemoved
+      },
       ...(reason ? { reason } : {})
     };
 
-    console.log('✅ Booking cancellation completed successfully');
+    console.log('✅ Booking cancellation completed successfully with enhanced actions:', responseData.actions_completed);
 
     return res.status(200).json(createSuccessResponse(
       responseData,

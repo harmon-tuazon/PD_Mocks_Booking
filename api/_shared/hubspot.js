@@ -290,6 +290,28 @@ class HubSpotService {
     return result;
   }
 
+  /**
+   * Remove association between two objects
+   * @param {string} fromObjectType - Source object type (e.g., 'bookings')
+   * @param {string} fromObjectId - Source object ID
+   * @param {string} toObjectType - Target object type (e.g., 'mock_exams')
+   * @param {string} toObjectId - Target object ID
+   */
+  async removeAssociation(fromObjectType, fromObjectId, toObjectType, toObjectId) {
+    const path = `/crm/v4/objects/${fromObjectType}/${fromObjectId}/associations/${toObjectType}/${toObjectId}`;
+
+    console.log(`🗑️ Removing association: ${fromObjectType}(${fromObjectId}) → ${toObjectType}(${toObjectId})`);
+
+    try {
+      const result = await this.apiCall('DELETE', path);
+      console.log(`✅ Association removed successfully between ${fromObjectType}(${fromObjectId}) and ${toObjectType}(${toObjectId})`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Failed to remove association:`, error);
+      throw error;
+    }
+  }
+
 
   /**
    * Search enrollments for a contact
@@ -1338,6 +1360,74 @@ ${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}
       }
 
       return null;
+    }
+  }
+
+  /**
+   * Create a cancellation note on Contact timeline
+   * @param {string} contactId - HubSpot Contact ID
+   * @param {object} cancellationData - Booking and cancellation details
+   */
+  async createBookingCancellationNote(contactId, cancellationData) {
+    const timestamp = new Date().toISOString();
+    const formattedDate = cancellationData.exam_date ?
+      new Date(cancellationData.exam_date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }) : 'Date TBD';
+
+    const noteContent = `
+
+ <h3>❌ Mock Exam Booking Cancelled</h3>
+<p><strong>Booking Details:</strong></p>
+<ul>
+<li><strong>Booking ID:</strong> ${cancellationData.booking_id || 'N/A'}</li>
+<li><strong>Mock Type:</strong> ${cancellationData.mock_type || 'Mock Exam'}</li>
+<li><strong>Exam Date:</strong> ${formattedDate}</li>
+<li><strong>Location:</strong> ${cancellationData.location || 'Location TBD'}</li>
+<li><strong>Cancelled At:</strong> ${new Date(timestamp).toLocaleString('en-US', { timeZone: 'America/Toronto'})}</li>
+${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}` : ''}</li>
+</ul>
+
+<p><strong>Student Information:</strong></p>
+<ul>
+<li><strong>Student:</strong> ${cancellationData.name || cancellationData.email || 'Student'}</li>
+</ul>
+
+<hr style="margin: 15px 0; border: 0; border-top: 1px solid #e0e0e0;">
+  <p style="font-size: 12px; color: #666;">
+  <em>🔄 Booking automatically marked as cancelled via booking management system</em>
+  </p>`;
+
+    const notePayload = {
+      properties: {
+        hs_timestamp: Date.now(),
+        hs_note_body: noteContent
+      },
+      associations: [
+
+        {
+          to: { id: contactId },
+          types: [
+            {
+              associationCategory: 'HUBSPOT_DEFINED',
+              associationTypeId: 202  // Note to Contact association type
+            }
+          ]
+        }
+      ]
+    };
+
+    try {
+      console.log(`📝 Creating cancellation note for Contact ${contactId}:`, cancellationData);
+      const result = await this.apiCall('POST', '/crm/v3/objects/notes', notePayload);
+      console.log(`✅ Cancellation note created successfully: Note ID ${result.id}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Failed to create cancellation note:`, error);
+      throw error;
     }
   }
 
