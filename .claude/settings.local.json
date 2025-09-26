@@ -57,7 +57,8 @@
       "Bash(npm run dev:*)",
       "Bash(npm run pre-deploy:*)",
       "Bash(git add:*)",
-      "Read(//c/**)"
+      "Read(//c/**)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

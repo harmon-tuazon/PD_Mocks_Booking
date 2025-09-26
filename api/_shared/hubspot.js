@@ -1020,6 +1020,12 @@ class HubSpotService {
           method: 'GET',
           url: `/crm/v4/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}/associations/${HUBSPOT_OBJECTS.contacts}`
         });
+        
+        console.log('🔍 [ASSOCIATION DEBUG] Raw contact associations from V4 API:', {
+          hasResults: !!contactAssocs.results,
+          resultsLength: contactAssocs.results?.length || 0,
+          rawResults: contactAssocs.results
+        });
       } catch (e) {
         console.log('No contact associations found');
       }
@@ -1033,33 +1039,45 @@ class HubSpotService {
         console.log('No mock exam associations found');
       }
 
-      // Combine results in V3-compatible format
-      // CRITICAL: Convert numeric IDs to strings for consistent comparison
+      // CRITICAL FIX: Properly map V4 association response to expected format
+      // V4 API returns associations with 'toObjectId' as the target ID
       const result = {
         ...bookingResult,
         data: bookingResult.data || bookingResult,
         associations: {
           [HUBSPOT_OBJECTS.contacts]: {
-            results: contactAssocs.results?.map(a => ({
-              id: String(a.toObjectId),  // Convert to string for consistent comparison
-              toObjectId: String(a.toObjectId),  // Convert to string for consistent comparison
-              type: 'booking_to_contact'
-            })) || []
+            results: contactAssocs.results?.map(a => {
+              console.log('🔍 [ASSOCIATION MAPPING] Processing contact association:', {
+                rawAssociation: a,
+                toObjectId: a.toObjectId,
+                toObjectIdType: typeof a.toObjectId,
+                associationType: a.associationSpec?.associationTypeId
+              });
+              
+              return {
+                id: a.toObjectId,  // This is the contact ID we want to match against
+                toObjectId: a.toObjectId,  // Keep for backward compatibility
+                type: 'booking_to_contact',
+                associationTypeId: a.associationSpec?.associationTypeId
+              };
+            }) || []
           },
           [HUBSPOT_OBJECTS.mock_exams]: {
             results: mockExamAssocs.results?.map(a => ({
-              id: String(a.toObjectId),  // Convert to string for consistent comparison
-              toObjectId: String(a.toObjectId),  // Convert to string for consistent comparison
-              type: 'booking_to_mock_exam'
+              id: a.toObjectId,  // This is the mock exam ID
+              toObjectId: a.toObjectId,  // Keep for backward compatibility
+              type: 'booking_to_mock_exam',
+              associationTypeId: a.associationSpec?.associationTypeId
             })) || []
           }
         }
       };
 
-      console.log('🔍 [HUBSPOT DEBUG] Booking fetch successful:', {
+      console.log('🔍 [HUBSPOT DEBUG] Final booking result with mapped associations:', {
         hasResult: !!result,
         bookingId: result?.id || result?.data?.id,
         contactAssociations: result.associations[HUBSPOT_OBJECTS.contacts].results.length,
+        contactAssocDetails: result.associations[HUBSPOT_OBJECTS.contacts].results,
         mockExamAssociations: result.associations[HUBSPOT_OBJECTS.mock_exams].results.length
       });
 

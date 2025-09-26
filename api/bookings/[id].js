@@ -243,24 +243,49 @@ async function handleGetRequest(req, res, hubspot, bookingId, contactId, contact
     });
 
     const belongsToUser = contactAssociations.some(assoc => {
-      // Check multiple possible ID fields with type conversion
+      // ROBUST COMPARISON: Handle both numeric and string IDs from HubSpot
+      const contactIdStr = String(contactId);
+      const contactIdNum = Number(contactId);
+
+      const assocIdStr = String(assoc.id);
+      const assocIdNum = Number(assoc.id);
+      const assocToObjectIdStr = String(assoc.toObjectId);
+      const assocToObjectIdNum = Number(assoc.toObjectId);
+
+      // Multiple comparison strategies to handle HubSpot's inconsistent ID types
       const matches = [
+        // Direct equality (works if both are same type)
         assoc.id === contactId,
         assoc.toObjectId === contactId,
-        String(assoc.id) === String(contactId),
-        String(assoc.toObjectId) === String(contactId),
-        // Also check if the association has a numeric ID that needs to be compared as string
-        assoc.id && String(assoc.id).replace('0-1_', '') === String(contactId),
-        assoc.toObjectId && String(assoc.toObjectId).replace('0-1_', '') === String(contactId)
+
+        // String comparison
+        assocIdStr === contactIdStr,
+        assocToObjectIdStr === contactIdStr,
+
+        // Numeric comparison (if both are valid numbers)
+        !isNaN(assocIdNum) && !isNaN(contactIdNum) && assocIdNum === contactIdNum,
+        !isNaN(assocToObjectIdNum) && !isNaN(contactIdNum) && assocToObjectIdNum === contactIdNum,
+
+        // Handle prefixed IDs (remove common HubSpot prefixes)
+        assocIdStr.replace(/^0-1[_-]?/, '') === contactIdStr.replace(/^0-1[_-]?/, ''),
+        assocToObjectIdStr.replace(/^0-1[_-]?/, '') === contactIdStr.replace(/^0-1[_-]?/, '')
       ];
 
       const hasMatch = matches.some(Boolean);
 
-      console.log('🔍 [OWNERSHIP DEBUG] Association check:', {
-        assocId: assoc.id,
-        assocToObjectId: assoc.toObjectId,
-        contactId,
-        matchResults: matches.map((m, i) => `Check${i}: ${m}`),
+      console.log('🔍 [OWNERSHIP DEBUG] Enhanced association check:', {
+        contactId: contactId,
+        contactIdType: typeof contactId,
+        assoc: {
+          id: assoc.id,
+          idType: typeof assoc.id,
+          toObjectId: assoc.toObjectId,
+          toObjectIdType: typeof assoc.toObjectId
+        },
+        stringComparisons: {
+          'assoc.id vs contactId': `"${assocIdStr}" === "${contactIdStr}" = ${assocIdStr === contactIdStr}`,
+          'assoc.toObjectId vs contactId': `"${assocToObjectIdStr}" === "${contactIdStr}" = ${assocToObjectIdStr === contactIdStr}`
+        },
         hasMatch
       });
 
@@ -437,40 +462,82 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
         toObjectId: assoc.toObjectId,
         toObjectIdType: typeof assoc.toObjectId,
         type: assoc.type,
+        originalType: assoc.originalType,
+        originalValue: assoc.originalValue,
         allKeys: Object.keys(assoc)
       }))
     });
 
     const belongsToUser = contactAssociations.some(assoc => {
-      // Check multiple possible ID fields with type conversion
+      // CRITICAL FIX: Both IDs should now be strings after the HubSpot service fix
+      // The getBookingWithAssociations method now converts V4 API numeric toObjectId to string
+      const contactIdStr = String(contactId);
+      const assocIdStr = String(assoc.id);
+      const assocToObjectIdStr = String(assoc.toObjectId);
+
+      // Simple string comparison should now work reliably
       const matches = [
-        assoc.id === contactId,
-        assoc.toObjectId === contactId,
-        String(assoc.id) === String(contactId),
-        String(assoc.toObjectId) === String(contactId),
-        // Also check if the association has a numeric ID that needs to be compared as string
-        assoc.id && String(assoc.id).replace('0-1_', '') === String(contactId),
-        assoc.toObjectId && String(assoc.toObjectId).replace('0-1_', '') === String(contactId)
+        // Primary comparison - both should be strings now
+        assoc.id === contactIdStr,
+        assoc.toObjectId === contactIdStr,
+
+        // Fallback comparisons for safety
+        assocIdStr === contactIdStr,
+        assocToObjectIdStr === contactIdStr
       ];
 
       const hasMatch = matches.some(Boolean);
 
-      console.log('🔍 [DELETE OWNERSHIP DEBUG] Association check:', {
-        assocId: assoc.id,
-        assocToObjectId: assoc.toObjectId,
-        contactId,
-        matchResults: matches.map((m, i) => `Check${i}: ${m}`),
-        hasMatch
-      });
+      // Enhanced logging for debugging
+      if (hasMatch || contactAssociations.length <= 1) {
+        console.log('✅ [DELETE OWNERSHIP DEBUG] Match result for association:', {
+          contactId: contactId,
+          contactIdType: typeof contactId,
+          assoc: {
+            id: assoc.id,
+            idType: typeof assoc.id,
+            toObjectId: assoc.toObjectId,
+            toObjectIdType: typeof assoc.toObjectId,
+            originalType: assoc.originalType,
+            originalValue: assoc.originalValue
+          },
+          matchDetails: {
+            directId: assoc.id === contactIdStr,
+            directToObjectId: assoc.toObjectId === contactIdStr,
+            stringId: assocIdStr === contactIdStr,
+            stringToObjectId: assocToObjectIdStr === contactIdStr
+          },
+          hasMatch
+        });
+      }
 
       return hasMatch;
     });
 
     if (!belongsToUser) {
-      console.error('❌ [DELETE OWNERSHIP DEBUG] Access denied - no matching associations found');
+      console.error('❌ [DELETE OWNERSHIP DEBUG] Access denied - no matching associations found:', {
+        bookingId,
+        contactId,
+        contactIdType: typeof contactId,
+        associationsFound: contactAssociations.length,
+        associationDetails: contactAssociations.map(a => ({
+          id: a.id,
+          idType: typeof a.id,
+          toObjectId: a.toObjectId,
+          toObjectIdType: typeof a.toObjectId,
+          originalType: a.originalType,
+          originalValue: a.originalValue
+        })),
+        debugHint: 'Check if HubSpot V4 API is returning numeric toObjectId while contact.id is string'
+      });
       const error = new Error('Access denied. This booking does not belong to you.');
       error.status = 403;
       error.code = 'ACCESS_DENIED';
+      error.details = {
+        bookingId,
+        associationsFound: contactAssociations.length,
+        hint: 'If associations exist but verification fails, there may be an ID type mismatch'
+      };
       throw error;
     }
 
