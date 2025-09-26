@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, isBefore, isAfter, startOfDay, parseISO } from 'date-fns';
 import { DeleteBookingModal } from '../shared';
+import { formatBookingNumber, getBookingStatus, normalizeBooking, formatTimeRange } from '../../services/api';
 
 const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading, error }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -18,12 +19,16 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
     const grouped = {};
     if (bookings && bookings.length > 0) {
       bookings.forEach(booking => {
+        // Normalize booking to ensure all properties exist
+        const normalizedBooking = normalizeBooking(booking);
         // Use exam_date directly as it's already in YYYY-MM-DD format
-        const dateKey = booking.exam_date;
-        if (!grouped[dateKey]) {
+        const dateKey = normalizedBooking.exam_date;
+        if (dateKey && !grouped[dateKey]) {
           grouped[dateKey] = [];
         }
-        grouped[dateKey].push(booking);
+        if (dateKey) {
+          grouped[dateKey].push(normalizedBooking);
+        }
       });
     }
     return grouped;
@@ -55,7 +60,8 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
       }
 
       // Count by status
-      if (booking.status === 'completed') {
+      const status = getBookingStatus(booking);
+      if (status === 'completed') {
         stats.completed++;
       }
 
@@ -67,7 +73,8 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
         }
 
         // Count upcoming bookings
-        if (booking.status === 'scheduled' && isAfter(bookingDate, now)) {
+        const status = getBookingStatus(booking);
+        if (status === 'scheduled' && isAfter(bookingDate, now)) {
           stats.upcoming++;
         }
       } catch (e) {
@@ -289,6 +296,16 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
   const formatTime = (timeString) => {
     if (!timeString) return '';
     try {
+      // Handle ISO timestamp format
+      if (timeString.includes('T') || timeString.includes('-')) {
+        const date = new Date(timeString);
+        const hour = date.getHours();
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+        return `${displayHour}:${minutes} ${ampm}`;
+      }
+      // Handle HH:MM format
       const [hours, minutes] = timeString.split(':');
       const hour = parseInt(hours);
       const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -299,7 +316,14 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
     }
   };
 
-  const getStatusBadge = (status) => {
+  // Format time range for display using the API service function
+  // This function properly handles ISO timestamps from HubSpot
+  const formatBookingTimeRange = (booking) => {
+    return formatTimeRange(booking);
+  };
+
+  const getStatusBadge = (booking) => {
+    const status = getBookingStatus(booking);
     const statusConfig = {
       scheduled: { color: 'bg-blue-100 text-blue-800 border-blue-200', label: 'Scheduled', icon: '📅' },
       completed: { color: 'bg-green-100 text-green-800 border-green-200', label: 'Completed', icon: '✓' },
@@ -456,11 +480,11 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
                         {getMockTypeConfig(booking.mock_type).abbr}
                       </span>
                       <div>
-                        <h3 className="font-semibold text-gray-900">{booking.mock_type}</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">#{booking.booking_number}</p>
+                        <h3 className="font-semibold text-gray-900">{booking.mock_type || 'Mock Exam'}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">#{formatBookingNumber(booking)}</p>
                       </div>
                     </div>
-                    {getStatusBadge(booking.status)}
+                    {getStatusBadge(booking)}
                   </div>
 
                   {/* Booking Details */}
@@ -470,11 +494,11 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span>{formatTime(booking.start_time)}</span>
+                      <span>{formatBookingTimeRange(booking)}</span>
                     </div>
 
                     {/* Location */}
-                    {booking.location && (
+                    {booking.location && booking.location !== 'Location TBD' && (
                       <div className="flex items-center gap-2 text-gray-600">
                         <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -497,7 +521,7 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
 
                   {/* Action Buttons */}
                   <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2">
-                    {booking.status === 'scheduled' && !isPastBooking(booking) && (
+                    {getBookingStatus(booking) === 'scheduled' && booking.is_active !== false && !isPastBooking(booking) && (
                       <>
                         <button
                           onClick={() => {
@@ -518,17 +542,17 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
                         </button>
                       </>
                     )}
-                    {booking.status === 'completed' && (
+                    {getBookingStatus(booking) === 'completed' && (
                       <div className="flex-1 text-center px-3 py-1.5 text-xs text-gray-500 bg-gray-50 rounded-md">
                         ✓ Exam Completed
                       </div>
                     )}
-                    {booking.status === 'cancelled' && (
+                    {getBookingStatus(booking) === 'cancelled' && (
                       <div className="flex-1 text-center px-3 py-1.5 text-xs text-gray-500 bg-gray-50 rounded-md">
                         ✕ Booking Cancelled
                       </div>
                     )}
-                    {isPastBooking(booking) && booking.status === 'scheduled' && (
+                    {isPastBooking(booking) && getBookingStatus(booking) === 'scheduled' && (
                       <div className="flex-1 text-center px-3 py-1.5 text-xs text-gray-500 bg-gray-50 rounded-md">
                         Past Booking
                       </div>
@@ -687,10 +711,10 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
                                 <span className={`hidden sm:inline truncate ${config.text} font-semibold text-xs`}>
                                   {formatTime(booking.start_time)}
                                 </span>
-                                {booking.status === 'completed' && (
+                                {getBookingStatus(booking) === 'completed' && (
                                   <span className="ml-auto text-green-700 font-bold">✓</span>
                                 )}
-                                {booking.status === 'cancelled' && (
+                                {getBookingStatus(booking) === 'cancelled' && (
                                   <span className="ml-auto text-red-600 font-bold">✕</span>
                                 )}
                               </div>

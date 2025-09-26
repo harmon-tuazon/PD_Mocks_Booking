@@ -275,18 +275,13 @@ class HubSpotService {
   async createAssociation(fromObjectType, fromObjectId, toObjectType, toObjectId) {
     const path = `/crm/v4/objects/${fromObjectType}/${fromObjectId}/associations/${toObjectType}/${toObjectId}`;
 
-    // Use the exact association type IDs from the improvement request
-    const associationTypeId = this.getDefaultAssociationTypeId(fromObjectType, toObjectType);
-
-    const payload = [
-      {
-        associationCategory: "USER_DEFINED",
-        associationTypeId: associationTypeId
-      }
-    ];
+    // CRITICAL FIX: Use empty payload to let HubSpot use default association types
+    // Previous attempts with USER_DEFINED category and specific type IDs were failing
+    // Empty array tells HubSpot to create a default association
+    const payload = [];
 
     console.log(`🔗 Creating association: ${fromObjectType}(${fromObjectId}) → ${toObjectType}(${toObjectId})`);
-    console.log(`📋 Using exact association type ID: ${associationTypeId}, category: USER_DEFINED`);
+    console.log(`📋 Using default HubSpot association (empty payload)`);
 
     const result = await this.apiCall('PUT', path, payload);
     console.log(`✅ Association created successfully:`, result);
@@ -461,14 +456,15 @@ class HubSpotService {
   }
 
   /**
-   * Get bookings for a contact with associated mock exam details
+   * Get bookings for a contact with associated mock exam details - OPTIMIZED VERSION
    * @param {string} contactId - The HubSpot contact ID
-   * @param {string} filter - Filter type: 'all', 'upcoming', 'past'
-   * @param {number} page - Page number for pagination
-   * @param {number} limit - Number of results per page
+   * @param {Object} options - Query options
+   * @param {string} options.filter - Filter type: 'all', 'upcoming', 'past'
+   * @param {number} options.page - Page number for pagination
+   * @param {number} options.limit - Number of results per page
    * @returns {Object} - Bookings with pagination info
    */
-  async getBookingsForContact(contactId, filter = 'all', page = 1, limit = 20) {
+  async getBookingsForContact(contactId, { filter = 'all', page = 1, limit = 10 } = {}) {
     try {
       console.log(`📋 Getting bookings for contact ${contactId} with filter: ${filter}, page: ${page}, limit: ${limit}`);
 
@@ -489,13 +485,29 @@ class HubSpotService {
         };
       }
 
-      // Step 2: Batch retrieve booking objects with their properties
+      // Step 2: Batch retrieve booking objects with CORRECTED properties
+      // Fetch mock exam details directly if they're stored on booking, otherwise we'll need associations
+      const bookingProperties = [
+        'booking_id',
+        'mock_type',      // Fetch directly from booking if available
+        'location',       // Fetch directly from booking if available
+        'start_time',     // Fetch directly from booking if available
+        'end_time',       // Fetch directly from booking if available
+        'exam_date',      // Fetch directly from booking if available
+        'is_active',      // Fetch directly from booking if available
+        'name',
+        'email',
+        'dominant_hand',
+        'hs_createdate',
+        'hs_object_id'
+      ];
+
       const batchReadPayload = {
         inputs: bookingIds.map(id => ({ id })),
-        properties: ['booking_id', 'name', 'email', 'dominant_hand', 'hs_createdate', 'hs_object_id']
+        properties: bookingProperties
       };
 
-      console.log(`📦 Batch reading ${bookingIds.length} booking objects`);
+      console.log(`📦 Batch reading ${bookingIds.length} booking objects with optimized properties`);
       const bookingsResponse = await this.apiCall(
         'POST',
         `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}/batch/read`,
@@ -517,86 +529,362 @@ class HubSpotService {
         };
       }
 
-      // Step 3: Get associated mock exams for each booking
+      // Step 3: Process bookings - check if we have mock exam data directly on bookings
       const bookingsWithExams = [];
       const now = new Date();
+      const nowISOString = now.toISOString();
+      const nowTimestamp = now.getTime();
 
-      console.log(`🔍 Processing ${bookingsResponse.results.length} booking objects to get mock exam details`);
+      console.log(`🕐 [FILTER DEBUG] Current time reference:`, {
+        now: nowISOString,
+        timestamp: nowTimestamp,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      });
+
+      // Collect booking IDs that need mock exam association fetching
+      const bookingsNeedingMockExamData = [];
+      const processedBookings = [];
 
       for (const booking of bookingsResponse.results) {
-        try {
-          // Get mock exam associations for this booking
-          const mockExamAssocs = await this.apiCall(
-            'GET',
-            `/crm/v4/objects/${HUBSPOT_OBJECTS.bookings}/${booking.id}/associations/${HUBSPOT_OBJECTS.mock_exams}`
-          );
+        console.log(`🔍 [BOOKING DEBUG] Processing booking ${booking.id}:`, {
+          id: booking.id,
+          booking_id: booking.properties.booking_id,
+          has_mock_type: !!booking.properties.mock_type,
+          has_exam_date: !!booking.properties.exam_date,
+          raw_exam_date: booking.properties.exam_date,
+          mock_type: booking.properties.mock_type
+        });
 
-          if (mockExamAssocs?.results && mockExamAssocs.results.length > 0) {
-            // Get the first associated mock exam (should only be one per booking)
-            const mockExamId = mockExamAssocs.results[0].toObjectId;
-            
-            // Fetch mock exam details
-            const mockExam = await this.getMockExam(mockExamId);
-            
+        // Check if booking already has mock exam properties
+        if (booking.properties.mock_type && booking.properties.exam_date) {
+          // We have the data directly on the booking - no need for additional queries!
+          const examDateRaw = booking.properties.exam_date;
+          let examDate;
+          let isValidDate = false;
+
+          // Try multiple date parsing approaches to handle different formats
+          try {
+            // First try direct parsing
+            examDate = new Date(examDateRaw);
+
+            // Check if the parsed date is valid
+            if (!isNaN(examDate.getTime())) {
+              isValidDate = true;
+            } else {
+              // Try parsing as timestamp if it's a number
+              if (!isNaN(Number(examDateRaw))) {
+                examDate = new Date(Number(examDateRaw));
+                isValidDate = !isNaN(examDate.getTime());
+              }
+            }
+
+            // If still invalid, try parsing as ISO string with timezone handling
+            if (!isValidDate && typeof examDateRaw === 'string') {
+              // Handle potential timezone issues
+              examDate = new Date(examDateRaw.replace(' ', 'T'));
+              isValidDate = !isNaN(examDate.getTime());
+            }
+          } catch (dateError) {
+            console.error(`❌ [DATE ERROR] Failed to parse exam_date for booking ${booking.id}:`, {
+              raw_date: examDateRaw,
+              error: dateError.message
+            });
+            isValidDate = false;
+          }
+
+          if (!isValidDate) {
+            console.error(`❌ [DATE ERROR] Invalid exam_date for booking ${booking.id}, excluding from results:`, {
+              raw_date: examDateRaw,
+              type: typeof examDateRaw
+            });
+            // Skip this booking if we can't parse the date
+            continue;
+          }
+
+          const examDateTimestamp = examDate.getTime();
+          const isUpcoming = examDateTimestamp >= nowTimestamp;
+          const status = isUpcoming ? 'upcoming' : 'past';
+
+          console.log(`📅 [DATE DEBUG] Booking ${booking.id} date analysis:`, {
+            raw_exam_date: examDateRaw,
+            parsed_exam_date: examDate.toISOString(),
+            exam_timestamp: examDateTimestamp,
+            now_timestamp: nowTimestamp,
+            time_diff_hours: Math.round((examDateTimestamp - nowTimestamp) / (1000 * 60 * 60) * 100) / 100,
+            is_upcoming: isUpcoming,
+            status: status,
+            filter: filter,
+            will_include: filter === 'all' || filter === status
+          });
+
+          if (filter === 'all' || filter === status) {
+            console.log(`✅ [FILTER DEBUG] Including booking ${booking.id} (status: ${status}, filter: ${filter})`);
+            processedBookings.push({
+              booking,
+              mockExamData: {
+                mock_type: booking.properties.mock_type,
+                exam_date: booking.properties.exam_date,
+                location: booking.properties.location || 'Mississauga',
+                start_time: booking.properties.start_time,
+                end_time: booking.properties.end_time,
+                is_active: booking.properties.is_active
+              },
+              status
+            });
+          } else {
+            console.log(`❌ [FILTER DEBUG] Excluding booking ${booking.id} (status: ${status}, filter: ${filter})`);
+          }
+        } else {
+          console.log(`⚠️ [BOOKING DEBUG] Booking ${booking.id} missing mock exam properties, will fetch via associations`);
+          // We need to fetch mock exam data via associations
+          bookingsNeedingMockExamData.push(booking);
+        }
+      }
+
+      // Step 4: If any bookings need mock exam data, batch fetch the associations
+      if (bookingsNeedingMockExamData.length > 0) {
+        console.log(`⚠️ ${bookingsNeedingMockExamData.length} bookings missing mock exam properties, fetching via associations...`);
+
+        // Batch get all mock exam associations
+        const mockExamIds = new Set();
+        const bookingToMockExamMap = new Map();
+
+        // Get associations for all bookings that need it
+        console.log(`🔍 Fetching mock exam associations for ${bookingsNeedingMockExamData.length} bookings...`);
+
+        for (const booking of bookingsNeedingMockExamData) {
+          try {
+            const mockExamAssocs = await this.apiCall(
+              'GET',
+              `/crm/v4/objects/${HUBSPOT_OBJECTS.bookings}/${booking.id}/associations/${HUBSPOT_OBJECTS.mock_exams}`
+            );
+
+            if (mockExamAssocs?.results && mockExamAssocs.results.length > 0) {
+              const mockExamId = mockExamAssocs.results[0].toObjectId;
+              mockExamIds.add(mockExamId);
+              bookingToMockExamMap.set(booking.id, mockExamId);
+            } else {
+              console.warn(`⚠️ No mock exam association found for booking ${booking.id} (${booking.properties.booking_id})`);
+            }
+          } catch (error) {
+            console.error(`❌ Failed to get mock exam association for booking ${booking.id}:`, error.message);
+          }
+        }
+
+        console.log(`✅ Found ${mockExamIds.size} mock exam associations`);
+
+        // Batch fetch all unique mock exams
+        if (mockExamIds.size > 0) {
+          const mockExamBatchPayload = {
+            inputs: Array.from(mockExamIds).map(id => ({ id })),
+            properties: ['exam_date', 'start_time', 'end_time', 'capacity', 'total_bookings', 'mock_type', 'location', 'is_active']
+          };
+
+          console.log(`📦 Batch reading ${mockExamIds.size} mock exam objects...`);
+
+          try {
+            const mockExamsResponse = await this.apiCall(
+              'POST',
+              `/crm/v3/objects/${HUBSPOT_OBJECTS.mock_exams}/batch/read`,
+              mockExamBatchPayload
+            );
+
+            // Create a map of mock exam data
+            const mockExamDataMap = new Map();
+            if (mockExamsResponse?.results) {
+              for (const mockExam of mockExamsResponse.results) {
+                mockExamDataMap.set(mockExam.id, mockExam);
+              }
+              console.log(`✅ Retrieved ${mockExamsResponse.results.length} mock exam details`);
+            } else {
+              console.error(`❌ No mock exam data returned from batch read`);
+            }
+
+            // Process bookings with fetched mock exam data
+            for (const booking of bookingsNeedingMockExamData) {
+              const mockExamId = bookingToMockExamMap.get(booking.id);
+              // Convert mockExamId to string since the map keys are strings
+              const mockExam = mockExamId ? mockExamDataMap.get(String(mockExamId)) : null;
+
+
             if (mockExam) {
-              const examDate = new Date(mockExam.properties.exam_date);
-              const status = examDate >= now ? 'upcoming' : 'past';
+              const examDateRaw = mockExam.properties.exam_date;
+              let examDate;
+              let isValidDate = false;
 
-              // Apply filter logic
+              // Apply the same robust date parsing as above
+              try {
+                examDate = new Date(examDateRaw);
+
+                if (!isNaN(examDate.getTime())) {
+                  isValidDate = true;
+                } else {
+                  if (!isNaN(Number(examDateRaw))) {
+                    examDate = new Date(Number(examDateRaw));
+                    isValidDate = !isNaN(examDate.getTime());
+                  }
+                }
+
+                if (!isValidDate && typeof examDateRaw === 'string') {
+                  examDate = new Date(examDateRaw.replace(' ', 'T'));
+                  isValidDate = !isNaN(examDate.getTime());
+                }
+              } catch (dateError) {
+                console.error(`❌ [DATE ERROR] Failed to parse mock exam date for booking ${booking.id}:`, {
+                  raw_date: examDateRaw,
+                  error: dateError.message
+                });
+                isValidDate = false;
+              }
+
+              if (!isValidDate) {
+                console.error(`❌ [DATE ERROR] Invalid mock exam date for booking ${booking.id}, excluding:`, {
+                  raw_date: examDateRaw,
+                  mock_exam_id: mockExamId
+                });
+                continue;
+              }
+
+              const examDateTimestamp = examDate.getTime();
+              const isUpcoming = examDateTimestamp >= nowTimestamp;
+              const status = isUpcoming ? 'upcoming' : 'past';
+
+              console.log(`📅 [DATE DEBUG] Association booking ${booking.id} date analysis:`, {
+                raw_exam_date: examDateRaw,
+                parsed_exam_date: examDate.toISOString(),
+                exam_timestamp: examDateTimestamp,
+                now_timestamp: nowTimestamp,
+                time_diff_hours: Math.round((examDateTimestamp - nowTimestamp) / (1000 * 60 * 60) * 100) / 100,
+                is_upcoming: isUpcoming,
+                status: status,
+                filter: filter,
+                will_include: filter === 'all' || filter === status
+              });
+
               if (filter === 'all' || filter === status) {
-                bookingsWithExams.push({
-                  id: booking.id,
-                  booking_id: booking.properties.booking_id,
-                  booking_number: booking.properties.booking_id, // Add this for frontend compatibility
-                  name: booking.properties.name,
-                  email: booking.properties.email,
-                  dominant_hand: booking.properties.dominant_hand === 'true',
-                  // Add flattened fields for frontend compatibility
-                  mock_type: mockExam.properties.mock_type,
-                  exam_date: mockExam.properties.exam_date,
-                  location: mockExam.properties.location || 'Mississauga',
-                  start_time: mockExam.properties.start_time,
-                  end_time: mockExam.properties.end_time,
-                  // Keep nested structure for backward compatibility
-                  mock_exam: {
+                console.log(`✅ [FILTER DEBUG] Including association booking ${booking.id} (status: ${status}, filter: ${filter})`);
+                processedBookings.push({
+                  booking,
+                  mockExamData: {
                     id: mockExamId,
-                    exam_date: mockExam.properties.exam_date,
                     mock_type: mockExam.properties.mock_type,
+                    exam_date: mockExam.properties.exam_date,
                     location: mockExam.properties.location || 'Mississauga',
                     start_time: mockExam.properties.start_time,
                     end_time: mockExam.properties.end_time,
                     capacity: parseInt(mockExam.properties.capacity) || 0,
                     total_bookings: parseInt(mockExam.properties.total_bookings) || 0
                   },
-                  status: status === 'upcoming' ? 'scheduled' : status === 'past' ? 'completed' : status, // Map status for frontend compatibility
-                  created_at: booking.properties.hs_createdate
+                  status
                 });
+              } else {
+                console.log(`❌ [FILTER DEBUG] Excluding association booking ${booking.id} (status: ${status}, filter: ${filter})`);
               }
             } else {
-              console.warn(`⚠️ Mock exam ${mockExamId} not found for booking ${booking.id}`);
+              console.warn(`❌ No mock exam data found for booking ${booking.id} (${booking.properties.booking_id}), excluding from results`);
             }
-          } else {
-            console.warn(`⚠️ No mock exam associations found for booking ${booking.id}`);
           }
-        } catch (error) {
-          console.error(`❌ Error fetching mock exam details for booking ${booking.id}:`, error.message);
-          // Continue processing other bookings
+          } catch (batchError) {
+            console.error(`❌ [BATCH ERROR] Failed to batch read mock exams:`, {
+              error_message: batchError.message,
+              error_status: batchError.response?.status,
+              error_data: batchError.response?.data,
+              mock_exam_ids: mockExamIdArray
+            });
+          }
+        } else {
+          console.error(`🚨 No mock exam associations found for any of the ${bookingsNeedingMockExamData.length} bookings`);
         }
       }
 
-      // Step 4: Sort bookings by exam date
+      // Step 5: Format all processed bookings for output
+      for (const { booking, mockExamData, status } of processedBookings) {
+        console.log('🔍 [HUBSPOT DEBUG] Adding booking to list:', {
+          hubspotObjectId: booking.id,
+          customBookingId: booking.properties.booking_id,
+          mockType: mockExamData.mock_type
+        });
+
+        bookingsWithExams.push({
+          id: booking.id,
+          booking_id: booking.properties.booking_id,
+          booking_number: booking.properties.booking_id, // For frontend compatibility
+          name: booking.properties.name,
+          email: booking.properties.email,
+          dominant_hand: booking.properties.dominant_hand === 'true',
+          // Flattened fields for frontend
+          mock_type: mockExamData.mock_type,
+          exam_date: mockExamData.exam_date,
+          location: mockExamData.location,
+          start_time: mockExamData.start_time,
+          end_time: mockExamData.end_time,
+          // Nested structure for backward compatibility
+          mock_exam: mockExamData,
+          status: status === 'upcoming' ? 'scheduled' : status === 'past' ? 'completed' : status,
+          created_at: booking.properties.hs_createdate
+        });
+      }
+
+      // Step 6: Sort bookings by exam date (with error handling)
       bookingsWithExams.sort((a, b) => {
-        const dateA = new Date(a.mock_exam.exam_date);
-        const dateB = new Date(b.mock_exam.exam_date);
-        return filter === 'past' ? dateB - dateA : dateA - dateB; // Past: newest first, Upcoming: soonest first
+        try {
+          const dateA = new Date(a.exam_date);
+          const dateB = new Date(b.exam_date);
+
+          // Ensure both dates are valid before comparison
+          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+            console.warn(`⚠️ [SORT WARNING] Invalid date in booking sort:`, {
+              booking_a: { id: a.id, exam_date: a.exam_date },
+              booking_b: { id: b.id, exam_date: b.exam_date }
+            });
+            return 0; // Keep original order if dates are invalid
+          }
+
+          return filter === 'past' ? dateB - dateA : dateA - dateB; // Past: newest first, Upcoming: soonest first
+        } catch (sortError) {
+          console.error(`❌ [SORT ERROR] Failed to sort bookings:`, sortError.message);
+          return 0;
+        }
       });
 
-      // Step 5: Apply pagination
+      // Step 7: Apply pagination
       const totalBookings = bookingsWithExams.length;
       const totalPages = Math.ceil(totalBookings / limit);
       const startIndex = (page - 1) * limit;
       const endIndex = startIndex + limit;
       const paginatedBookings = bookingsWithExams.slice(startIndex, endIndex);
+
+      console.log(`📊 [FINAL DEBUG] Booking processing summary:`, {
+        initial_bookings_found: bookingsResponse?.results?.length || 0,
+        bookings_with_direct_data: bookingsResponse?.results?.length - bookingsNeedingMockExamData.length,
+        bookings_needing_associations: bookingsNeedingMockExamData.length,
+        total_processed_bookings: processedBookings.length,
+        final_bookings_count: totalBookings,
+        paginated_bookings_count: paginatedBookings.length,
+        filter: filter,
+        page: page,
+        current_time: nowISOString
+      });
+
+      // 🚨 CRITICAL DEBUG: If we expected bookings but got 0, log detailed analysis
+      if ((bookingsResponse?.results?.length > 0) && (totalBookings === 0)) {
+        console.error(`🚨 [CRITICAL DEBUG] Found ${bookingsResponse.results.length} bookings but processed 0!`);
+        console.error('This indicates all bookings were filtered out. Reasons could be:');
+        console.error('1. All exam dates are invalid/unparseable');
+        console.error('2. All exam dates fail the upcoming/past filter');
+        console.error('3. Missing mock exam associations for all bookings');
+
+        // Log each original booking for analysis
+        bookingsResponse.results.forEach((booking, idx) => {
+          console.error(`[${idx + 1}] Booking ${booking.id}:`, {
+            booking_id: booking.properties.booking_id,
+            has_mock_type: !!booking.properties.mock_type,
+            has_exam_date: !!booking.properties.exam_date,
+            exam_date: booking.properties.exam_date,
+            mock_type: booking.properties.mock_type
+          });
+        });
+      }
 
       console.log(`✅ Successfully processed ${totalBookings} bookings (filter: ${filter}), returning ${paginatedBookings.length} for page ${page}`);
 
@@ -614,16 +902,16 @@ class HubSpotService {
 
     } catch (error) {
       console.error(`❌ Error getting bookings for contact ${contactId}:`, error);
-      
+
       // Handle rate limiting and other API errors gracefully
       if (error.response?.status === 429) {
         throw new Error('API rate limit exceeded. Please try again in a moment.');
       }
-      
+
       if (error.response?.status === 404) {
         throw new Error(`Contact not found or has no booking associations.`);
       }
-      
+
       // Re-throw with more context
       throw new Error(`Failed to retrieve bookings: ${error.message}`);
     }
@@ -639,26 +927,93 @@ class HubSpotService {
    * @returns {Promise<object>} Booking object with associations
    */
   async getBookingWithAssociations(bookingId) {
-    return await this.apiCall({
-      method: 'GET',
-      url: `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}`,
-      params: {
-        properties: [
-          'booking_id',
-          'name',
-          'email',
-          'dominant_hand',
-          'status',
-          'createdate',
-          'hs_lastmodifieddate'
-        ],
-        associations: [
-          HUBSPOT_OBJECTS.contacts,
-          HUBSPOT_OBJECTS.mock_exams,
-          HUBSPOT_OBJECTS.deals
-        ]
-      }
+    console.log('🔍 [HUBSPOT DEBUG] Getting booking with associations:', {
+      bookingId,
+      bookingIdType: typeof bookingId,
+      hubspotObjectType: HUBSPOT_OBJECTS.bookings,
+      url: `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}`
     });
+
+    try {
+      // Get booking properties with V3 API
+      const bookingResult = await this.apiCall({
+        method: 'GET',
+        url: `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}`,
+        params: {
+          properties: [
+            'booking_id',
+            'name',
+            'email',
+            'dominant_hand',
+            'status',
+            'createdate',
+            'hs_lastmodifieddate'
+          ]
+        }
+      });
+
+      // Get associations using V4 API for better reliability
+      let contactAssocs = { results: [] };
+      let mockExamAssocs = { results: [] };
+
+      try {
+        contactAssocs = await this.apiCall({
+          method: 'GET',
+          url: `/crm/v4/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}/associations/${HUBSPOT_OBJECTS.contacts}`
+        });
+      } catch (e) {
+        console.log('No contact associations found');
+      }
+
+      try {
+        mockExamAssocs = await this.apiCall({
+          method: 'GET',
+          url: `/crm/v4/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}/associations/${HUBSPOT_OBJECTS.mock_exams}`
+        });
+      } catch (e) {
+        console.log('No mock exam associations found');
+      }
+
+      // Combine results in V3-compatible format
+      // CRITICAL: Convert numeric IDs to strings for consistent comparison
+      const result = {
+        ...bookingResult,
+        data: bookingResult.data || bookingResult,
+        associations: {
+          [HUBSPOT_OBJECTS.contacts]: {
+            results: contactAssocs.results?.map(a => ({
+              id: String(a.toObjectId),  // Convert to string for consistent comparison
+              toObjectId: String(a.toObjectId),  // Convert to string for consistent comparison
+              type: 'booking_to_contact'
+            })) || []
+          },
+          [HUBSPOT_OBJECTS.mock_exams]: {
+            results: mockExamAssocs.results?.map(a => ({
+              id: String(a.toObjectId),  // Convert to string for consistent comparison
+              toObjectId: String(a.toObjectId),  // Convert to string for consistent comparison
+              type: 'booking_to_mock_exam'
+            })) || []
+          }
+        }
+      };
+
+      console.log('🔍 [HUBSPOT DEBUG] Booking fetch successful:', {
+        hasResult: !!result,
+        bookingId: result?.id || result?.data?.id,
+        contactAssociations: result.associations[HUBSPOT_OBJECTS.contacts].results.length,
+        mockExamAssociations: result.associations[HUBSPOT_OBJECTS.mock_exams].results.length
+      });
+
+      return result;
+    } catch (error) {
+      console.error('❌ [HUBSPOT ERROR] Failed to fetch booking:', {
+        bookingId,
+        error: error.message,
+        status: error.status || error.response?.status,
+        details: error.response?.data
+      });
+      throw error;
+    }
   }
 
   /**

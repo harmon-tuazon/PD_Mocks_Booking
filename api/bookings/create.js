@@ -202,6 +202,8 @@ module.exports = module.exports = async function handler(req, res) {
     // Associate with Contact
     try {
       console.log(`Attempting to associate booking ${createdBookingId} with contact ${contact_id}`);
+      console.log(`📊 Association details: Booking(${createdBookingId}) → Contact(${contact_id})`);
+
       const contactAssociation = await hubspot.createAssociation(
         HUBSPOT_OBJECTS.bookings,
         createdBookingId,
@@ -211,15 +213,16 @@ module.exports = module.exports = async function handler(req, res) {
       console.log('✅ Contact association created successfully:', contactAssociation);
       associationResults.push({ type: 'contact', success: true, result: contactAssociation });
     } catch (err) {
-      console.error('❌ Failed to associate with contact:', err);
-      console.error('Contact association error details:', {
+      console.error('❌ Failed to associate with contact:', err.message);
+      console.error('🔍 CRITICAL: Contact association error details:', {
         fromObject: HUBSPOT_OBJECTS.bookings,
         fromId: createdBookingId,
         toObject: HUBSPOT_OBJECTS.contacts,
         toId: contact_id,
         error: err.message,
         status: err.response?.status,
-        data: err.response?.data
+        data: err.response?.data,
+        context: err.response?.data?.context
       });
       associationResults.push({ type: 'contact', success: false, error: err.message });
     }

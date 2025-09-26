@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUserSession, clearUserSession } from '../utils/auth';
-import apiService from '../services/api';
-import BookingsCalendar from './bookings/BookingsCalendar';
+import apiService, { normalizeBooking, formatBookingNumber, getBookingStatus, formatTimeRange as apiFormatTimeRange } from '../services/api';
+import BookingsCalendarView from './bookings/BookingsCalendarView';
 import TokenCard from './shared/TokenCard';
 import CapacityBadge from './shared/CapacityBadge';
 import ResponsiveLogo from './shared/Logo';
@@ -143,7 +143,9 @@ const MyBookings = () => {
       });
 
       if (response.success) {
-        setBookings(response.data.bookings);
+        // Normalize bookings to ensure all necessary properties are present
+        const normalizedBookings = response.data.bookings.map(normalizeBooking);
+        setBookings(normalizedBookings);
         setCredits(response.data.credits);
         setTotalPages(response.data.pagination.total_pages);
         setTotalBookings(response.data.pagination.total);
@@ -190,21 +192,39 @@ const MyBookings = () => {
 
   // Handle opening the delete modal
   const handleCancelBooking = (booking) => {
-    setBookingToDelete(booking);
+    // Ensure booking is normalized before deletion
+    const normalizedBooking = normalizeBooking(booking);
+    setBookingToDelete(normalizedBooking);
     setDeleteModalOpen(true);
     setDeleteError('');
   };
 
   // Handle confirming the deletion
-  const handleConfirmDelete = async () => {
-    if (!bookingToDelete) return;
+  const handleConfirmDelete = async (objectId) => {
+    if (!objectId || !bookingToDelete) return;
+
+    console.log('🔍 [DEBUG] Booking deletion started:', {
+      objectId,
+      objectIdType: typeof objectId,
+      bookingToDelete: {
+        id: bookingToDelete.id,
+        booking_id: bookingToDelete.booking_id,
+        booking_number: bookingToDelete.booking_number,
+        is_active: bookingToDelete.is_active,
+        allKeys: Object.keys(bookingToDelete)
+      }
+    });
 
     setIsDeleting(true);
     setDeleteError('');
 
     try {
-      // Call API to cancel booking
-      const response = await apiService.cancelBooking(bookingToDelete.id);
+      // Call API to cancel booking with proper user authentication data
+      const response = await apiService.bookings.cancelBooking(objectId, {
+        student_id: userSession.studentId,
+        email: userSession.email,
+        reason: 'User requested cancellation'
+      });
 
       if (response.success) {
         // Close modal
@@ -242,15 +262,39 @@ const MyBookings = () => {
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return 'Date TBD';
+
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
+      let date;
+
+      // Handle different date formats that HubSpot might return
+      if (typeof dateString === 'string' && dateString.includes('T')) {
+        // ISO format like "2025-09-26T00:00:00.000Z"
+        date = new Date(dateString);
+      } else if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // YYYY-MM-DD format - parse as local date to avoid timezone shift
+        const [year, month, day] = dateString.split('-').map(num => parseInt(num, 10));
+        date = new Date(year, month - 1, day); // month is 0-indexed
+      } else {
+        // Try direct parsing
+        date = new Date(dateString);
+      }
+
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date:', dateString);
+        return dateString;
+      }
+
+      const result = date.toLocaleDateString('en-US', {
         weekday: 'short',
         year: 'numeric',
         month: 'short',
         day: 'numeric'
       });
+
+      return result;
     } catch (error) {
+      console.error('Date formatting error:', error, 'input:', dateString);
       return dateString;
     }
   };
@@ -258,19 +302,78 @@ const MyBookings = () => {
   // Format time for display
   const formatTime = (timeString) => {
     if (!timeString) return '';
+
     try {
-      const [hours, minutes] = timeString.split(':');
-      const hour = parseInt(hours);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-      return `${displayHour}:${minutes} ${ampm}`;
+      // Convert to string and clean
+      let cleanTimeString = String(timeString).trim();
+
+      // Handle edge case: If it looks like a year (4 digits > 1000), it's likely corrupted data
+      if (/^\d{4}$/.test(cleanTimeString) && parseInt(cleanTimeString) > 1000) {
+        console.warn('Detected potential year value as time:', cleanTimeString);
+        return 'Time TBD';
+      }
+
+      // Handle timestamp values (milliseconds since epoch)
+      const numericValue = parseInt(cleanTimeString, 10);
+      if (!isNaN(numericValue) && numericValue > 86400000) { // More than 1 day in milliseconds
+        const date = new Date(numericValue);
+        if (!isNaN(date.getTime())) {
+          const hour = date.getHours();
+          const minute = date.getMinutes();
+          const ampm = hour >= 12 ? 'PM' : 'AM';
+          const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+          return `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm}`;
+        }
+        return 'Time TBD';
+      }
+
+      // If it's already in a time format (like "14:00:00" or "14:00")
+      if (cleanTimeString.includes(':')) {
+        const timeParts = cleanTimeString.split(':');
+        const hours = timeParts[0];
+        const minutes = timeParts[1] || '00';
+
+        const hour = parseInt(hours, 10);
+
+        // Validate hour
+        if (isNaN(hour) || hour < 0 || hour > 23) {
+          console.warn('Invalid hour value:', hour, 'from:', cleanTimeString);
+          return 'Time TBD';
+        }
+
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+
+        return `${displayHour}:${minutes.padStart(2, '0')} ${ampm}`;
+      }
+
+      // If it's just a number (like 14 for 2 PM)
+      if (!isNaN(numericValue) && numericValue >= 0 && numericValue <= 23) {
+        const ampm = numericValue >= 12 ? 'PM' : 'AM';
+        const displayHour = numericValue > 12 ? numericValue - 12 : numericValue === 0 ? 12 : numericValue;
+        return `${displayHour}:00 ${ampm}`;
+      }
+
+      // If we can't parse it, return a safe default
+      console.warn('Unable to parse time:', timeString);
+      return 'Time TBD';
     } catch (error) {
-      return timeString;
+      console.error('Time formatting error:', error, 'input:', timeString);
+      return 'Time TBD';
     }
   };
 
+  // Format time range for display using the API service function
+  // This function properly handles ISO timestamps from HubSpot
+  const formatBookingTimeRange = (booking) => {
+    return apiFormatTimeRange(booking);
+  };
+
   // Get booking status badge
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (booking) => {
+    // Use normalized status from booking
+    const status = getBookingStatus(booking);
+
     const statusConfig = {
       scheduled: { color: 'bg-blue-100 text-blue-800 border-blue-200', label: 'Scheduled', icon: '📅' },
       completed: { color: 'bg-green-100 text-green-800 border-green-200', label: 'Completed', icon: '✓' },
@@ -326,10 +429,10 @@ const MyBookings = () => {
     >
       <div className="flex justify-between items-start mb-2">
         <div className="flex-1">
-          <p className="font-semibold text-sm text-primary-900">{booking.booking_number}</p>
-          <p className="text-lg font-medium text-gray-900 mt-1">{booking.mock_type}</p>
+          <p className="font-semibold text-sm text-primary-900">{formatBookingNumber(booking)}</p>
+          <p className="text-lg font-medium text-gray-900 mt-1">{booking.mock_type || 'Mock Exam'}</p>
         </div>
-        {getStatusBadge(booking.status)}
+        {getStatusBadge(booking)}
       </div>
 
       <div className="space-y-1 text-sm text-gray-600">
@@ -343,7 +446,7 @@ const MyBookings = () => {
           <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span>{formatTime(booking.start_time)}</span>
+          <span>{formatBookingTimeRange(booking)}</span>
         </div>
         {booking.location && (
           <div className="flex items-center gap-2">
@@ -356,7 +459,7 @@ const MyBookings = () => {
         )}
       </div>
 
-      {booking.status === 'scheduled' && (
+      {getBookingStatus(booking) === 'scheduled' && booking.is_active !== false && (
         <div className="mt-3 flex justify-end">
           <button
             onClick={(e) => {
@@ -519,21 +622,21 @@ const MyBookings = () => {
         {/* Single Available Credits Card */}
         {Object.keys(creditInfo).length > 0 && (
           <div className="mb-6 sm:mb-8">
-            <div className="max-w-lg">
+            <div className="max-w-md">
               <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-                <div className="px-4 py-3 border-b">
-                  <h3 className="font-subheading text-base font-medium text-primary-900">Available Credits</h3>
-                  <p className="font-body text-sm text-primary-600 mt-0.5">Your current credit balance</p>
+                <div className="px-3 py-2 border-b">
+                  <h3 className="font-subheading text-sm font-medium text-primary-900">Available Credits</h3>
+                  <p className="font-body text-xs text-primary-600 mt-0.5">Your current credit balance</p>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Credit Type
                         </th>
-                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Amount
                         </th>
                       </tr>
@@ -549,13 +652,13 @@ const MyBookings = () => {
 
                         return (
                           <tr key={examType.type} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
+                            <td className="px-2 py-1.5 whitespace-nowrap">
+                              <div className="text-xs font-medium text-gray-900">
                                 {examType.type}
                               </div>
                             </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-center">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
                                 total > 0
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-gray-100 text-gray-800'
@@ -566,11 +669,30 @@ const MyBookings = () => {
                           </tr>
                         );
                       })}
+                      {/* Add standalone Shared Mock Credits row */}
+                      {credits && credits.shared_mock_credits !== undefined && (
+                        <tr className={examTypes.length % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-2 py-1.5 whitespace-nowrap">
+                            <div className="text-xs font-medium text-gray-900">
+                              Shared Mock Credits
+                            </div>
+                          </td>
+                          <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                            <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
+                              credits.shared_mock_credits > 0
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {credits.shared_mock_credits}
+                            </span>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
 
-                <div className="px-3 py-2 bg-gray-50 text-xs text-gray-500">
+                <div className="px-2 py-1 bg-gray-50 text-xs text-gray-500">
                   Credits are automatically deducted when you book an exam.
                 </div>
               </div>
@@ -699,7 +821,7 @@ const MyBookings = () => {
             </p>
             <div className="mt-6">
                 <button
-                  onClick={() => navigate('/book')}
+                  onClick={() => navigate('/book/exam-types')}
                   className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
                   <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -708,7 +830,6 @@ const MyBookings = () => {
                   Book Your First Exam
                 </button>
               </div>
-            )}
           </div>
         )}
 
@@ -737,7 +858,7 @@ const MyBookings = () => {
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Status
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
@@ -747,12 +868,12 @@ const MyBookings = () => {
                           <tr key={booking.id} className="hover:bg-gray-50 transition-colors duration-200">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-medium text-primary-900">
-                                {booking.booking_number}
+                                {formatBookingNumber(booking)}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-medium text-gray-900">
-                                {booking.mock_type}
+                                {booking.mock_type || 'Mock Exam'}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -760,25 +881,25 @@ const MyBookings = () => {
                                 {formatDate(booking.exam_date)}
                               </div>
                               <div className="text-sm text-gray-500">
-                                {formatTime(booking.start_time)}
+                                {formatBookingTimeRange(booking)}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">
-                                {booking.location || 'TBD'}
+                                {booking.location || 'Location TBD'}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              {getStatusBadge(booking.status)}
+                              {getStatusBadge(booking)}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              {booking.status === 'scheduled' && (
+                            <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                              {getBookingStatus(booking) === 'scheduled' && booking.is_active !== false && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleCancelBooking(booking);
                                   }}
-                                  className="text-red-600 hover:text-red-700"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md transition-colors"
                                 >
                                   Cancel
                                 </button>
@@ -800,9 +921,8 @@ const MyBookings = () => {
               </>
             ) : (
               /* Calendar View */
-              <BookingsCalendar
+              <BookingsCalendarView
                 bookings={bookings}
-                onBookingClick={handleBookingClick}
                 onCancelBooking={handleCancelBooking}
                 isLoading={loading}
                 error={error}

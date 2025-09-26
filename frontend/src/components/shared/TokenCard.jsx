@@ -28,10 +28,10 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
     },
   ];
 
-  // Only add shared credits for non-mini-mock types
+  // Only add shared mock credits for non-mini-mock types
   if (mockType !== 'Mini-mock') {
     tokenData.push({
-      type: 'Shared Credits',
+      type: 'Shared Mock Credits',
       amount: shared_credits,
     });
   }
@@ -80,19 +80,19 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
 
   return (
     <div className={`bg-white border rounded-lg overflow-hidden shadow-sm ${className}`}>
-      <div className="px-4 py-3 border-b">
-        <h3 className="font-subheading text-base font-medium text-primary-900">Available Credits</h3>
-        <p className="font-body text-sm text-primary-600 mt-0.5">Your current credit balance</p>
+      <div className="px-3 py-2 border-b">
+        <h3 className="font-subheading text-sm font-medium text-primary-900">Available Credits</h3>
+        <p className="font-body text-xs text-primary-600 mt-0.5">Your current credit balance</p>
       </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Credit Type
               </th>
-              <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Amount
               </th>
             </tr>
@@ -100,13 +100,13 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
           <tbody className="bg-white divide-y divide-gray-200">
             {tokenData.map((token, index) => (
               <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                <td className="px-3 py-2 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">
+                <td className="px-2 py-1.5 whitespace-nowrap">
+                  <div className="text-xs font-medium text-gray-900">
                     {token.type}
                   </div>
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap text-center">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                  <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
                     token.amount > 0
                       ? 'bg-green-100 text-green-800'
                       : 'bg-gray-100 text-gray-800'
@@ -117,13 +117,13 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
               </tr>
             ))}
             <tr className="bg-gray-50 font-medium">
-              <td className="px-3 py-2 whitespace-nowrap">
-                <div className="text-sm font-bold text-gray-900">
+              <td className="px-2 py-1.5 whitespace-nowrap">
+                <div className="text-xs font-bold text-gray-900">
                   Total Available
                 </div>
               </td>
-              <td className="px-3 py-2 whitespace-nowrap text-center">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+              <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
                   total > 0
                     ? 'bg-green-100 text-green-800'
                     : 'bg-red-100 text-red-800'
@@ -136,7 +136,7 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
         </table>
       </div>
 
-      <div className="px-3 py-2 bg-gray-50 text-xs text-gray-500">
+      <div className="px-2 py-1 bg-gray-50 text-xs text-gray-500">
         Credits are automatically deducted when you book an exam.
       </div>
     </div>

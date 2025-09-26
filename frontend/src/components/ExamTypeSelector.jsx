@@ -50,6 +50,9 @@ const ExamTypeSelector = () => {
   const fetchCreditInfo = async (userData) => {
     try {
       const creditData = {};
+      let sharedMockCredits = 0;
+
+      // Fetch credit info for each exam type
       for (const examType of examTypes) {
         const result = await apiService.mockExams.validateCredits(
           userData.studentId,
@@ -58,9 +61,25 @@ const ExamTypeSelector = () => {
         );
         if (result && result.data) {
           creditData[examType.type] = result.data;
+
+          // Get shared mock credits from non-Mini-mock exam types
+          // (Mini-mock doesn't use shared credits, so we need to get it from SJ or CS)
+          if (sharedMockCredits === 0 && examType.type !== 'Mini-mock' && result.data.credit_breakdown?.shared_credits) {
+            sharedMockCredits = result.data.credit_breakdown.shared_credits;
+          }
         }
       }
-      setCreditInfo(creditData);
+
+      // Store shared mock credits separately for the standalone row
+      // Always add shared mock credits if we have any exam type data
+      if (Object.keys(creditData).length > 0) {
+        setCreditInfo({
+          ...creditData,
+          _shared_mock_credits: sharedMockCredits // Add with special key
+        });
+      } else {
+        setCreditInfo(creditData);
+      }
     } catch (error) {
       console.error('Error fetching credit information:', error);
     }
@@ -164,33 +183,35 @@ const ExamTypeSelector = () => {
               {/* Credits Overview Table - Always on the RIGHT */}
               {Object.keys(creditInfo).length > 0 && (
                 <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-                  <div className="px-6 py-4 border-b">
-                    <h3 className="font-subheading text-lg font-medium text-primary-900">Available Credits</h3>
-                    <p className="font-body text-sm text-primary-600 mt-1">Your current credit balance</p>
+                  <div className="px-3 py-2 border-b">
+                    <h3 className="font-subheading text-sm font-medium text-primary-900">Available Credits</h3>
+                    <p className="font-body text-xs text-primary-600 mt-0.5">Your current credit balance</p>
                   </div>
 
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Exam Type
                           </th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Credits
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {Object.entries(creditInfo).map(([examType, credits], index) => (
+                        {Object.entries(creditInfo)
+                          .filter(([examType]) => examType !== '_shared_mock_credits') // Exclude special key from main list
+                          .map(([examType, credits], index) => (
                           <tr key={examType} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">
+                            <td className="px-2 py-1.5 whitespace-nowrap">
+                              <div className="text-xs font-medium text-gray-900">
                                 {examType}
                               </div>
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-center">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
                                 (credits?.available_credits || 0) > 0
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-gray-100 text-gray-800'
@@ -200,11 +221,30 @@ const ExamTypeSelector = () => {
                             </td>
                           </tr>
                         ))}
+                        {/* Add standalone Shared Mock Credits row */}
+                        {creditInfo._shared_mock_credits !== undefined && (
+                          <tr className={examTypes.length % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-2 py-1.5 whitespace-nowrap">
+                              <div className="text-xs font-medium text-gray-900">
+                                Shared Mock Credits
+                              </div>
+                            </td>
+                            <td className="px-2 py-1.5 whitespace-nowrap text-center">
+                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
+                                (creditInfo._shared_mock_credits || 0) > 0
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {creditInfo._shared_mock_credits || 0}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
 
-                  <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500">
+                  <div className="px-2 py-1 bg-gray-50 text-xs text-gray-500">
                     Credits are automatically deducted when you book an exam.
                   </div>
                 </div>

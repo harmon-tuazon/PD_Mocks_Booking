@@ -89,15 +89,20 @@ grep -r "SidebarNavigation\|MainLayout\|BookingsCalendar" frontend/dist/assets/ 
 # ⚠️ CRITICAL: Run from MONOREPO ROOT (not frontend/)
 pwd  # Verify you're in monorepo root before deploying
 
-# For Production Deployment (MANDATORY --force flag)
-vercel --prod --force
+# For Production Deployment
+vercel --prod
 
-# For Staging Deployment (MANDATORY --force flag)
-vercel --force
+# For Staging Deployment
+vercel
 
-# 🚨 NEVER use just 'vercel --prod' without --force flag
+# Use --force flag only when necessary:
+# - After significant file structure changes
+# - When cached builds are causing issues
+# - When Vercel seems to miss file updates
+vercel --prod --force  # Only when needed
+
 # 🚨 NEVER deploy from frontend/ directory - always from ROOT
-# The --force flag ensures ALL files (frontend + backend) are re-uploaded
+# ✅ Standard deployments work well without --force in most cases
 ```
 
 ### Expected Upload Size Indicators
@@ -141,7 +146,7 @@ If deployment seems incomplete:
 3. Check Vercel dashboard for build errors
 4. Verify vercel.json configuration is correct
 
-**🔥 REMEMBER**: Always use `--force` flag for production deployments in this monorepo!
+**🔥 REMEMBER**: Use `--force` flag only when standard deployment doesn't capture all changes!
 
 ## 🔄 The 5-Phase Development Workflow
 

@@ -48,6 +48,14 @@ async function handler(req, res) {
     return handleOptionsRequest(req, res);
   }
 
+  console.log('🔍 [HANDLER DEBUG] Booking API called:', {
+    method: req.method,
+    url: req.url,
+    query: req.query,
+    bookingId: req.query.id,
+    bookingIdType: typeof req.query.id
+  });
+
   try {
     // Security check
     await rateLimitMiddleware(req, res);
@@ -76,6 +84,16 @@ async function handler(req, res) {
     let inputParams;
     let schemaName;
 
+    console.log('🔍 [VALIDATION DEBUG] Request details:', {
+      method: req.method,
+      hasBody: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body) : null,
+      body: req.body,
+      hasQuery: !!req.query,
+      queryKeys: req.query ? Object.keys(req.query) : null,
+      query: req.query
+    });
+
     if (req.method === 'GET') {
       inputParams = {
         student_id: req.query.student_id,
@@ -91,14 +109,28 @@ async function handler(req, res) {
       schemaName = 'bookingCancellation';
     }
 
+    console.log('🔍 [VALIDATION DEBUG] Parsed input params:', {
+      inputParams,
+      schemaName
+    });
+
     // Validate input using appropriate schema
     const { error, value: validatedData } = schemas[schemaName].validate(inputParams);
     if (error) {
+      console.error('❌ [VALIDATION ERROR]:', {
+        error: error.details.map(detail => ({
+          field: detail.path.join('.'),
+          message: detail.message,
+          value: detail.context?.value
+        }))
+      });
       const validationError = new Error(`Invalid input: ${error.details.map(detail => detail.message).join(', ')}`);
       validationError.status = 400;
       validationError.code = 'VALIDATION_ERROR';
       throw validationError;
     }
+
+    console.log('✅ [VALIDATION SUCCESS] Validated data:', validatedData);
 
     const { student_id, email, reason } = validatedData;
 
@@ -193,16 +225,57 @@ async function handleGetRequest(req, res, hubspot, bookingId, contactId, contact
 
     const booking = bookingResponse.data;
 
-    // Step 3: Verify booking ownership
+    // Step 3: Verify booking ownership with enhanced debugging
     const contactAssociations = booking.associations?.[HUBSPOT_OBJECTS.contacts]?.results || [];
-    const belongsToUser = contactAssociations.some(assoc => assoc.id === contactId);
+
+    console.log('🔍 [OWNERSHIP DEBUG] Verifying booking ownership:', {
+      contactId,
+      contactIdType: typeof contactId,
+      associationsCount: contactAssociations.length,
+      contactAssociations: contactAssociations.map(assoc => ({
+        id: assoc.id,
+        idType: typeof assoc.id,
+        toObjectId: assoc.toObjectId,
+        toObjectIdType: typeof assoc.toObjectId,
+        type: assoc.type,
+        allKeys: Object.keys(assoc)
+      }))
+    });
+
+    const belongsToUser = contactAssociations.some(assoc => {
+      // Check multiple possible ID fields with type conversion
+      const matches = [
+        assoc.id === contactId,
+        assoc.toObjectId === contactId,
+        String(assoc.id) === String(contactId),
+        String(assoc.toObjectId) === String(contactId),
+        // Also check if the association has a numeric ID that needs to be compared as string
+        assoc.id && String(assoc.id).replace('0-1_', '') === String(contactId),
+        assoc.toObjectId && String(assoc.toObjectId).replace('0-1_', '') === String(contactId)
+      ];
+
+      const hasMatch = matches.some(Boolean);
+
+      console.log('🔍 [OWNERSHIP DEBUG] Association check:', {
+        assocId: assoc.id,
+        assocToObjectId: assoc.toObjectId,
+        contactId,
+        matchResults: matches.map((m, i) => `Check${i}: ${m}`),
+        hasMatch
+      });
+
+      return hasMatch;
+    });
 
     if (!belongsToUser) {
+      console.error('❌ [OWNERSHIP DEBUG] Access denied - no matching associations found');
       const error = new Error('Access denied. This booking does not belong to you.');
       error.status = 403;
       error.code = 'ACCESS_DENIED';
       throw error;
     }
+
+    console.log('✅ [OWNERSHIP DEBUG] Booking ownership verified');
 
     // Step 4: Get associated Mock Exam details
     let mockExamDetails = null;
@@ -306,28 +379,102 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
   let rollbackActions = [];
 
   try {
+    console.log('🔍 [BACKEND DEBUG] Delete request started:', {
+      bookingId,
+      bookingIdType: typeof bookingId,
+      contactId,
+      reason
+    });
+
     // Step 1: Fetch the booking with all associations
+    console.log('🔍 [BACKEND DEBUG] Calling getBookingWithAssociations with:', bookingId);
     const bookingResponse = await hubspot.getBookingWithAssociations(bookingId);
 
-    if (!bookingResponse || !bookingResponse.data) {
+    console.log('🔍 [BACKEND DEBUG] HubSpot response:', {
+      hasResponse: !!bookingResponse,
+      hasData: !!bookingResponse?.data,
+      responseType: typeof bookingResponse,
+      responseKeys: bookingResponse ? Object.keys(bookingResponse) : null
+    });
+
+    // Handle different response structures from HubSpot API
+    let booking;
+    if (bookingResponse?.data) {
+      // If response has .data property, use it
+      booking = bookingResponse.data;
+    } else if (bookingResponse?.id) {
+      // If response is the booking object directly, use it
+      booking = bookingResponse;
+    } else {
+      // No valid booking found
+      console.error('❌ [BACKEND ERROR] Booking not found:', {
+        bookingId,
+        response: bookingResponse
+      });
       const error = new Error('Booking not found');
       error.status = 404;
       error.code = 'BOOKING_NOT_FOUND';
       throw error;
     }
 
-    const booking = bookingResponse.data;
+    console.log('🔍 [BACKEND DEBUG] Booking object structure:', {
+      hasId: !!booking.id,
+      bookingObjectId: booking.id,
+      properties: booking.properties ? Object.keys(booking.properties) : null,
+      associations: booking.associations ? Object.keys(booking.associations) : null
+    });
 
-    // Step 2: Verify booking ownership
+    // Step 2: Verify booking ownership with enhanced debugging
     const contactAssociations = booking.associations?.[HUBSPOT_OBJECTS.contacts]?.results || [];
-    const belongsToUser = contactAssociations.some(assoc => assoc.id === contactId);
+
+    console.log('🔍 [DELETE OWNERSHIP DEBUG] Verifying booking ownership for DELETE:', {
+      contactId,
+      contactIdType: typeof contactId,
+      associationsCount: contactAssociations.length,
+      contactAssociations: contactAssociations.map(assoc => ({
+        id: assoc.id,
+        idType: typeof assoc.id,
+        toObjectId: assoc.toObjectId,
+        toObjectIdType: typeof assoc.toObjectId,
+        type: assoc.type,
+        allKeys: Object.keys(assoc)
+      }))
+    });
+
+    const belongsToUser = contactAssociations.some(assoc => {
+      // Check multiple possible ID fields with type conversion
+      const matches = [
+        assoc.id === contactId,
+        assoc.toObjectId === contactId,
+        String(assoc.id) === String(contactId),
+        String(assoc.toObjectId) === String(contactId),
+        // Also check if the association has a numeric ID that needs to be compared as string
+        assoc.id && String(assoc.id).replace('0-1_', '') === String(contactId),
+        assoc.toObjectId && String(assoc.toObjectId).replace('0-1_', '') === String(contactId)
+      ];
+
+      const hasMatch = matches.some(Boolean);
+
+      console.log('🔍 [DELETE OWNERSHIP DEBUG] Association check:', {
+        assocId: assoc.id,
+        assocToObjectId: assoc.toObjectId,
+        contactId,
+        matchResults: matches.map((m, i) => `Check${i}: ${m}`),
+        hasMatch
+      });
+
+      return hasMatch;
+    });
 
     if (!belongsToUser) {
+      console.error('❌ [DELETE OWNERSHIP DEBUG] Access denied - no matching associations found');
       const error = new Error('Access denied. This booking does not belong to you.');
       error.status = 403;
       error.code = 'ACCESS_DENIED';
       throw error;
     }
+
+    console.log('✅ [DELETE OWNERSHIP DEBUG] Booking ownership verified for deletion');
 
     // Step 3: Check if booking can be canceled
     const bookingStatus = booking.properties.status;

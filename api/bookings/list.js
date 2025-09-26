@@ -115,8 +115,18 @@ async function handler(req, res) {
     // Step 3: Get bookings using the improved associations-focused approach
     try {
       console.log(`📋 Retrieving bookings via HubSpot associations API (filter: ${filter}, page: ${page}, limit: ${limit})`);
-      
-      const bookingsData = await hubspot.getBookingsForContact(contactHsObjectId, filter, page, limit);
+
+      const bookingsData = await hubspot.getBookingsForContact(contactHsObjectId, { filter, page, limit });
+
+      console.log(`📊 [API DEBUG] Booking retrieval summary:`, {
+        filter: filter,
+        page: page,
+        limit: limit,
+        total_bookings: bookingsData.total,
+        returned_bookings: bookingsData.bookings.length,
+        total_pages: bookingsData.pagination.total_pages,
+        has_bookings: bookingsData.bookings.length > 0
+      });
 
       console.log(`📊 Successfully retrieved ${bookingsData.total} total bookings (filter: ${filter}, page: ${page}/${bookingsData.pagination.total_pages})`);
 

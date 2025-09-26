@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { FiCalendar, FiClock, FiMapPin, FiHash, FiEye, FiX, FiAlertCircle } from 'react-icons/fi';
 import { DeleteBookingModal } from '../shared';
+import { formatTimeRange } from '../../services/api';
 
 const BookingsList = ({
   bookings = [],
@@ -30,25 +31,18 @@ const BookingsList = ({
     }
   };
 
-  // Format time for display
-  const formatTime = (timeString) => {
-    if (!timeString) return '';
-    try {
-      const [hours, minutes] = timeString.split(':');
-      const hour = parseInt(hours);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-      return `${displayHour}:${minutes} ${ampm}`;
-    } catch (error) {
-      return timeString;
-    }
+  // Format time range for display using the API service function
+  // This function properly handles ISO timestamps from HubSpot
+  const formatBookingTimeRange = (booking) => {
+    // Pass the booking object to the API service formatTimeRange function
+    return formatTimeRange(booking);
   };
 
   // Determine booking status
   const getBookingStatus = (booking) => {
     if (booking.status === 'cancelled') return 'cancelled';
 
-    const examDate = new Date(booking.examDate);
+    const examDate = new Date(booking.exam_date);
     const now = new Date();
 
     if (examDate < now) return 'past';
@@ -193,7 +187,7 @@ const BookingsList = ({
           {/* Header with exam type and status */}
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-lg font-semibold text-gray-900 font-headline">
-              {booking.mockExam?.examType || 'Mock Exam'}
+              {booking.mock_type || 'Mock Exam'}
             </h3>
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${statusConfig.className}`}>
               <span>{statusConfig.icon}</span>
@@ -205,18 +199,23 @@ const BookingsList = ({
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2 text-gray-600">
               <FiCalendar className="w-4 h-4 flex-shrink-0" />
-              <span>{formatDate(booking.examDate)} | {formatTime(booking.examTime)}</span>
+              <span>{formatDate(booking.exam_date)}</span>
+            </div>
+
+            <div className="flex items-center gap-2 text-gray-600">
+              <FiClock className="w-4 h-4 flex-shrink-0" />
+              <span>{formatBookingTimeRange(booking)}</span>
             </div>
 
             <div className="flex items-center gap-2 text-gray-600">
               <FiMapPin className="w-4 h-4 flex-shrink-0" />
-              <span>{booking.mockExam?.campus || 'Location TBD'}</span>
+              <span>{booking.location || 'Location TBD'}</span>
             </div>
 
             <div className="flex items-center gap-2 text-gray-600">
               <FiHash className="w-4 h-4 flex-shrink-0" />
               <span className="text-xs font-mono truncate">
-                {booking.recordId || `${booking.mockExam?.examType || 'Exam'}-${booking.studentName} - ${booking.examDate}`}
+                {booking.booking_number || booking.booking_id || 'Booking ID TBD'}
               </span>
             </div>
           </div>

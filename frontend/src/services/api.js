@@ -143,6 +143,12 @@ const apiService = {
      * @param {object} cancelData - Cancellation data including student_id, email, and optional reason
      */
     cancelBooking: async (bookingId, cancelData = {}) => {
+      console.log('🔍 [API DEBUG] Cancel booking called:', {
+        bookingId,
+        bookingIdType: typeof bookingId,
+        cancelData
+      });
+
       // Extract user data from localStorage if not provided
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
 
@@ -151,6 +157,8 @@ const apiService = {
         email: cancelData.email || userData.email,
         reason: cancelData.reason || 'User requested cancellation'
       };
+
+      console.log('🔍 [API DEBUG] Making DELETE request to:', `/bookings/${bookingId}`, 'with data:', requestData);
 
       // Make DELETE request to the booking endpoint
       return api.delete(`/bookings/${bookingId}`, {
@@ -242,6 +250,62 @@ export const formatTimeRange = (exam) => {
   }
 
   return 'Time TBD';
+};
+
+// Helper to format booking number from booking_id
+export const formatBookingNumber = (booking) => {
+  if (booking.booking_number) {
+    return booking.booking_number;
+  }
+  if (booking.booking_id) {
+    // Extract last 8 chars of booking_id for display
+    return `BK-${booking.booking_id.slice(-8).toUpperCase()}`;
+  }
+  return 'Booking ID TBD';
+};
+
+// Helper to get booking status from is_active flag
+export const getBookingStatus = (booking) => {
+  // First check explicit status field
+  if (booking.status) {
+    return booking.status;
+  }
+
+  // Derive status from is_active and dates
+  if (booking.is_active === false || booking.is_active === 'false') {
+    return 'cancelled';
+  }
+
+  // Check if the exam date has passed
+  if (booking.exam_date) {
+    const examDate = new Date(booking.exam_date);
+    const now = new Date();
+    if (examDate < now) {
+      return 'completed';
+    }
+  }
+
+  return 'scheduled';
+};
+
+// Helper to ensure booking has all necessary properties
+export const normalizeBooking = (booking) => {
+  return {
+    ...booking,
+    // Ensure we have an id property
+    id: booking.id || booking.booking_id || booking.recordId,
+    // Ensure we have booking_number
+    booking_number: formatBookingNumber(booking),
+    // Ensure we have a status
+    status: getBookingStatus(booking),
+    // Ensure location is available
+    location: booking.location || 'Location TBD',
+    // Ensure exam_date is available
+    exam_date: booking.exam_date || booking.hs_createdate?.split('T')[0],
+    // Ensure times are available
+    start_time: booking.start_time || null,
+    end_time: booking.end_time || null
+  };
 };
 
 export const getCapacityColor = (availableSlots, capacity) => {
