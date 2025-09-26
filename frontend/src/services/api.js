@@ -266,17 +266,22 @@ export const formatBookingNumber = (booking) => {
 
 // Helper to get booking status from is_active flag
 export const getBookingStatus = (booking) => {
-  // First check explicit status field
+  // First check explicit status field if it exists
   if (booking.status) {
     return booking.status;
   }
 
-  // Derive status from is_active and dates
-  if (booking.is_active === false || booking.is_active === 'false') {
+  // Check is_active property for soft delete status
+  if (booking.is_active === 'Cancelled' || booking.is_active === 'cancelled' ||
+      booking.is_active === false || booking.is_active === 'false') {
     return 'cancelled';
   }
 
-  // Check if the exam date has passed
+  if (booking.is_active === 'Completed' || booking.is_active === 'completed') {
+    return 'completed';
+  }
+
+  // If booking is active, determine status based on exam date
   if (booking.exam_date) {
     const examDate = new Date(booking.exam_date);
     const now = new Date();
@@ -304,7 +309,9 @@ export const normalizeBooking = (booking) => {
     exam_date: booking.exam_date || booking.hs_createdate?.split('T')[0],
     // Ensure times are available
     start_time: booking.start_time || null,
-    end_time: booking.end_time || null
+    end_time: booking.end_time || null,
+    // Ensure is_active is available for status checking
+    is_active: booking.is_active || 'Active'
   };
 };
 

@@ -459,7 +459,7 @@ const MyBookings = () => {
         )}
       </div>
 
-      {getBookingStatus(booking) === 'scheduled' && booking.is_active !== false && (
+      {getBookingStatus(booking) === 'scheduled' && (
         <div className="mt-3 flex justify-end">
           <button
             onClick={(e) => {
@@ -893,7 +893,7 @@ const MyBookings = () => {
                               {getStatusBadge(booking)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                              {getBookingStatus(booking) === 'scheduled' && booking.is_active !== false && (
+                              {getBookingStatus(booking) === 'scheduled' && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();

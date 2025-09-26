@@ -572,12 +572,12 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       throw examError;
     }
 
-    // Step 8: Delete the booking (atomic operation 3)
+    // Step 8: Soft delete the booking by setting is_active to 'Cancelled' (atomic operation 3)
     try {
-      await hubspot.deleteBooking(bookingId);
-      console.log('✅ Booking deleted successfully');
+      await hubspot.softDeleteBooking(bookingId);
+      console.log('✅ Booking soft deleted (cancelled) successfully');
     } catch (deleteError) {
-      console.error('❌ Failed to delete booking:', deleteError);
+      console.error('❌ Failed to soft delete booking:', deleteError);
       await performRollback(rollbackActions);
       throw deleteError;
     }

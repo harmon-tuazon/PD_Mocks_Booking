@@ -208,7 +208,8 @@ class HubSpotService {
         booking_id: bookingData.bookingId,
         name: bookingData.name,
         email: bookingData.email,
-        dominant_hand: bookingData.dominantHand.toString()
+        dominant_hand: bookingData.dominantHand.toString(),
+        is_active: 'Active'  // Set booking as active when created
       }
     };
 
@@ -406,6 +407,26 @@ class HubSpotService {
   }
 
   /**
+   * Update booking properties (for soft delete and other updates)
+   */
+  async updateBooking(bookingId, properties) {
+    const payload = {
+      properties: properties
+    };
+
+    return await this.apiCall('PATCH', `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}/${bookingId}`, payload);
+  }
+
+  /**
+   * Soft delete a booking by setting is_active to 'Cancelled'
+   */
+  async softDeleteBooking(bookingId) {
+    return await this.updateBooking(bookingId, {
+      is_active: 'Cancelled'
+    });
+  }
+
+  /**
    * Delete a booking
    */
   /**
@@ -416,6 +437,36 @@ class HubSpotService {
    * @param {number} limit - Number of results per page
    * @returns {Object} - Bookings with pagination info
    */
+  /**
+   * Map booking status based on is_active property and exam date
+   * @param {Object} booking - The booking object
+   * @param {Object} mockExamData - The mock exam data
+   * @param {string} timeStatus - 'upcoming' or 'past' based on date comparison
+   * @returns {string} - Final status: 'scheduled', 'completed', or 'cancelled'
+   */
+  mapBookingStatus(booking, mockExamData, timeStatus) {
+    // First check is_active property for cancelled bookings
+    const isActive = booking.properties?.is_active || mockExamData?.is_active;
+
+    if (isActive === 'Cancelled' || isActive === 'cancelled' || isActive === false || isActive === 'false') {
+      return 'cancelled';
+    }
+
+    if (isActive === 'Completed' || isActive === 'completed') {
+      return 'completed';
+    }
+
+    // If booking is active, determine status based on time
+    if (timeStatus === 'upcoming') {
+      return 'scheduled';
+    } else if (timeStatus === 'past') {
+      return 'completed';
+    }
+
+    // Default to scheduled for active bookings
+    return 'scheduled';
+  }
+
   /**
    * Get contact's booking associations using HubSpot associations API
    * @param {string} contactId - The HubSpot contact ID
@@ -619,17 +670,19 @@ class HubSpotService {
 
           if (filter === 'all' || filter === status) {
             console.log(`✅ [FILTER DEBUG] Including booking ${booking.id} (status: ${status}, filter: ${filter})`);
+            const mockExamData = {
+              mock_type: booking.properties.mock_type,
+              exam_date: booking.properties.exam_date,
+              location: booking.properties.location || 'Mississauga',
+              start_time: booking.properties.start_time,
+              end_time: booking.properties.end_time,
+              is_active: booking.properties.is_active
+            };
             processedBookings.push({
               booking,
-              mockExamData: {
-                mock_type: booking.properties.mock_type,
-                exam_date: booking.properties.exam_date,
-                location: booking.properties.location || 'Mississauga',
-                start_time: booking.properties.start_time,
-                end_time: booking.properties.end_time,
-                is_active: booking.properties.is_active
-              },
-              status
+              mockExamData,
+              status,
+              finalStatus: this.mapBookingStatus(booking, mockExamData, status)
             });
           } else {
             console.log(`❌ [FILTER DEBUG] Excluding booking ${booking.id} (status: ${status}, filter: ${filter})`);
@@ -763,19 +816,22 @@ class HubSpotService {
 
               if (filter === 'all' || filter === status) {
                 console.log(`✅ [FILTER DEBUG] Including association booking ${booking.id} (status: ${status}, filter: ${filter})`);
+                const mockExamData = {
+                  id: mockExamId,
+                  mock_type: mockExam.properties.mock_type,
+                  exam_date: mockExam.properties.exam_date,
+                  location: mockExam.properties.location || 'Mississauga',
+                  start_time: mockExam.properties.start_time,
+                  end_time: mockExam.properties.end_time,
+                  capacity: parseInt(mockExam.properties.capacity) || 0,
+                  total_bookings: parseInt(mockExam.properties.total_bookings) || 0,
+                  is_active: mockExam.properties.is_active
+                };
                 processedBookings.push({
                   booking,
-                  mockExamData: {
-                    id: mockExamId,
-                    mock_type: mockExam.properties.mock_type,
-                    exam_date: mockExam.properties.exam_date,
-                    location: mockExam.properties.location || 'Mississauga',
-                    start_time: mockExam.properties.start_time,
-                    end_time: mockExam.properties.end_time,
-                    capacity: parseInt(mockExam.properties.capacity) || 0,
-                    total_bookings: parseInt(mockExam.properties.total_bookings) || 0
-                  },
-                  status
+                  mockExamData,
+                  status,
+                  finalStatus: this.mapBookingStatus(booking, mockExamData, status)
                 });
               } else {
                 console.log(`❌ [FILTER DEBUG] Excluding association booking ${booking.id} (status: ${status}, filter: ${filter})`);
@@ -798,11 +854,13 @@ class HubSpotService {
       }
 
       // Step 5: Format all processed bookings for output
-      for (const { booking, mockExamData, status } of processedBookings) {
+      for (const { booking, mockExamData, status, finalStatus } of processedBookings) {
         console.log('🔍 [HUBSPOT DEBUG] Adding booking to list:', {
           hubspotObjectId: booking.id,
           customBookingId: booking.properties.booking_id,
-          mockType: mockExamData.mock_type
+          mockType: mockExamData.mock_type,
+          timeStatus: status,
+          finalStatus: finalStatus
         });
 
         bookingsWithExams.push({
@@ -818,9 +876,10 @@ class HubSpotService {
           location: mockExamData.location,
           start_time: mockExamData.start_time,
           end_time: mockExamData.end_time,
+          is_active: mockExamData.is_active,  // Include is_active for frontend use
           // Nested structure for backward compatibility
           mock_exam: mockExamData,
-          status: status === 'upcoming' ? 'scheduled' : status === 'past' ? 'completed' : status,
+          status: finalStatus,  // Use the properly mapped status
           created_at: booking.properties.hs_createdate
         });
       }
