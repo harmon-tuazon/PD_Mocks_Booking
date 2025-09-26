@@ -86,10 +86,7 @@ const MainLayout = ({ children }) => {
         )}
 
         {/* Main Content Area - Full height with scroll */}
-        <main className={`
-          flex-1 transition-all duration-300 ease-in-out overflow-y-auto
-          ${showSidebar ? 'lg:ml-64' : ''}
-        `}>
+        <main className="flex-1 transition-all duration-300 ease-in-out overflow-y-auto">
           {children}
         </main>
       </div>
