@@ -181,7 +181,10 @@ class HubSpotService {
   }
 
   /**
-   * Check if booking already exists
+   * Check if an ACTIVE booking already exists with the same booking_id
+   * Only returns true if there's an active booking (is_active = 'Active')
+   * Cancelled bookings (is_active = 'Cancelled') are ignored
+   * This allows users to rebook for the same exam date after cancelling
    */
   async checkExistingBooking(bookingId) {
     const searchPayload = {
@@ -192,11 +195,40 @@ class HubSpotService {
           value: bookingId
         }]
       }],
-      limit: 1
+      properties: ['booking_id', 'is_active', 'hs_object_id'],
+      limit: 10  // Get more results in case there are multiple bookings
     };
 
     const result = await this.apiCall('POST', `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}/search`, searchPayload);
-    return result.total > 0;
+
+    // Log total bookings found for debugging
+    console.log(`🔍 Checking for existing booking with ID ${bookingId}:`, {
+      total_found: result.total,
+      results_returned: result.results?.length || 0
+    });
+
+    // Filter for only active bookings
+    const activeBookings = result.results?.filter(booking => {
+      const isActive = booking.properties?.is_active;
+      // Only consider booking as duplicate if it's explicitly 'Active'
+      return isActive === 'Active';
+    }) || [];
+
+    // Log detailed results for debugging
+    if (result.results && result.results.length > 0) {
+      console.log(`📊 Booking check for ${bookingId}:`, {
+        total_bookings: result.results.length,
+        active_bookings: activeBookings.length,
+        booking_statuses: result.results.map(b => ({
+          id: b.id,
+          booking_id: b.properties.booking_id,
+          is_active: b.properties.is_active || 'undefined'
+        }))
+      });
+    }
+
+    // Only return true if there's at least one active booking
+    return activeBookings.length > 0;
   }
 
   /**

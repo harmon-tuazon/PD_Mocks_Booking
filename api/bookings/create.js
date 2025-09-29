@@ -137,7 +137,7 @@ module.exports = module.exports = async function handler(req, res) {
 
     const isDuplicate = await hubspot.checkExistingBooking(bookingId);
     if (isDuplicate) {
-      const error = new Error('You already have a booking for this exam date');
+      const error = new Error('Duplicate booking detected: You already have a booking for this exam date');
       error.status = 400;
       error.code = 'DUPLICATE_BOOKING';
       throw error;

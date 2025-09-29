@@ -26,7 +26,7 @@
  *
  * DELETE operation enhancements:
  * - Creates cancellation note on Contact's timeline
- * - Removes association between Booking and Mock Exam
+ * - Decrements Mock Exam's total_bookings property
  * - Performs soft delete (sets is_active to 'Cancelled')
  * - Returns detailed actions_completed status
  */
@@ -508,21 +508,25 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       console.warn('⚠️ No Contact ID available for note creation');
     }
 
-    // Step 6: Remove Mock Exam association if it exists
-    let associationRemoved = false;
+    // Step 6: Decrement Mock Exam total_bookings if associated
+    let bookingsDecremented = false;
     if (mockExamId) {
       try {
-        await hubspot.removeAssociation(
-          HUBSPOT_OBJECTS.bookings,
-          bookingId,
-          HUBSPOT_OBJECTS.mock_exams,
-          mockExamId
-        );
-        console.log(`✅ Removed association between Booking ${bookingId} and Mock Exam ${mockExamId}`);
-        associationRemoved = true;
-      } catch (associationError) {
-        console.error('❌ Failed to remove Mock Exam association:', associationError.message);
-        // Continue with deletion even if association removal fails
+        // Get current total_bookings value
+        const currentTotal = parseInt(mockExamDetails?.total_bookings) || 0;
+
+        // Only decrement if there are bookings to decrement
+        if (currentTotal > 0) {
+          const newTotal = currentTotal - 1;
+          await hubspot.updateMockExamBookings(mockExamId, newTotal);
+          console.log(`✅ Decremented Mock Exam ${mockExamId} total_bookings from ${currentTotal} to ${newTotal}`);
+          bookingsDecremented = true;
+        } else {
+          console.log(`⚠️ Mock Exam ${mockExamId} total_bookings is already 0, skipping decrement`);
+        }
+      } catch (decrementError) {
+        console.error('❌ Failed to decrement Mock Exam total_bookings:', decrementError.message);
+        // Continue with deletion even if decrement fails
       }
     }
 
@@ -546,7 +550,7 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       actions_completed: {
         soft_delete: true,
         note_created: noteCreated,
-        association_removed: associationRemoved
+        bookings_decremented: bookingsDecremented
       },
       ...(reason ? { reason } : {})
     };
