@@ -37,6 +37,20 @@ function getCreditFieldToDeduct(mockType, creditBreakdown) {
 }
 
 /**
+ * Map credit field to token_used property value
+ */
+function mapCreditFieldToTokenUsed(creditField) {
+  const mapping = {
+    'sj_credits': 'Situational Judgment Token',
+    'cs_credits': 'Clinical Skills Token',
+    'sjmini_credits': 'Mini-mock Token',
+    'shared_mock_credits': 'Shared Token'
+  };
+  
+  return mapping[creditField] || 'Unknown Token';
+}
+
+/**
  * POST /api/bookings/create
  * Create a new booking for a mock exam slot and handle all associations
  */
@@ -181,19 +195,35 @@ module.exports = module.exports = async function handler(req, res) {
       throw error;
     }
 
-    // Step 4: Create booking
+    // Step 4: Determine which credit will be used (before creating booking)
+    const creditBreakdown = {
+      specific_credits: specificCredits,
+      shared_credits: sharedCredits
+    };
+
+    const creditField = getCreditFieldToDeduct(mock_type, creditBreakdown);
+    const tokenUsed = mapCreditFieldToTokenUsed(creditField);
+
+    console.log('💳 Credit to be deducted:', {
+      creditField,
+      tokenUsed,
+      currentValue: parseInt(contact.properties[creditField]) || 0
+    });
+
+    // Step 5: Create booking with token_used property
     const bookingData = {
       bookingId,
       name: sanitizedName,
       email: sanitizedEmail,
-      dominantHand: dominant_hand
+      dominantHand: dominant_hand,
+      tokenUsed: tokenUsed
     };
 
     const createdBooking = await hubspot.createBooking(bookingData);
     bookingCreated = true;
     createdBookingId = createdBooking.id;
 
-    // Step 5: Create associations with detailed logging
+    // Step 6: Create associations with detailed logging
     console.log(`Creating associations for booking ${createdBookingId}`);
     console.log(`Contact ID: ${contact_id}, Mock Exam ID: ${mock_exam_id}`);
 
@@ -264,23 +294,17 @@ module.exports = module.exports = async function handler(req, res) {
       mock_exam: mockExamAssocSuccess ? '✅' : '❌'
     });
 
-    // Step 6: Update total bookings counter
+    // Step 7: Update total bookings counter
     const newTotalBookings = totalBookings + 1;
     await hubspot.updateMockExamBookings(mock_exam_id, newTotalBookings);
 
-    // Step 7: Deduct credits
-    const creditBreakdown = {
-      specific_credits: specificCredits,
-      shared_credits: sharedCredits
-    };
-
-    const creditField = getCreditFieldToDeduct(mock_type, creditBreakdown);
+    // Step 8: Deduct credits (creditField already calculated in Step 4)
     const currentCreditValue = parseInt(contact.properties[creditField]) || 0;
     const newCreditValue = Math.max(0, currentCreditValue - 1);
 
     await hubspot.updateContactCredits(contact_id, creditField, newCreditValue);
 
-    // Step 8: Create Note in Contact timeline (async, non-blocking)
+    // Step 9: Create Note in Contact timeline (async, non-blocking)
     // This happens after booking is created but doesn't block the response
     const mockExamDataForNote = {
       exam_date,

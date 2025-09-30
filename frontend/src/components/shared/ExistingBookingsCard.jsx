@@ -36,10 +36,17 @@ const ExistingBookingsCard = ({
       });
 
       if (response.success) {
-        const upcomingBookings = response.data.bookings || [];
-        setBookings(upcomingBookings);
-        setUpcomingCount(upcomingBookings.length);
-        setTotalBookings(response.data.pagination?.total || upcomingBookings.length);
+        const allBookings = response.data.bookings || [];
+        
+        // Filter to only show bookings where is_active === "Active"
+        const activeBookings = allBookings.filter(booking => {
+          const isActive = booking.is_active || booking.mock_exam?.is_active;
+          return isActive === 'Active' || isActive === 'active';
+        });
+        
+        setBookings(activeBookings);
+        setUpcomingCount(activeBookings.length);
+        setTotalBookings(activeBookings.length);
       } else {
         throw new Error(response.error || 'Failed to fetch bookings');
       }
@@ -209,7 +216,7 @@ const ExistingBookingsCard = ({
           {/* Card Header */}
           <div className="px-4 py-3 border-b">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-medium text-gray-900">My Bookings</h3>
+              <h3 className="text-sm font-medium text-gray-900">My Upcoming Mocks</h3>
               {upcomingCount > 0 && (
                 <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-primary-600 rounded-full">
                   {upcomingCount}

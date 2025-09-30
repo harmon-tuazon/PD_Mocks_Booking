@@ -488,7 +488,8 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       location: mockExamDetails?.location || bookingProperties.location || 'Location TBD',
       name: bookingProperties.name || contact.properties?.firstname + ' ' + contact.properties?.lastname,
       email: bookingProperties.email || contact.properties?.email,
-      reason: reason || 'User requested cancellation'
+      reason: reason || 'User requested cancellation',
+      token_used: bookingProperties.token_used || 'Not specified'
     };
 
     console.log('📝 Cancellation data prepared:', cancellationData);
@@ -530,6 +531,41 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       }
     }
 
+    // Step 6.5: Restore credits to contact
+    let creditsRestored = null;
+    const tokenUsed = bookingProperties.token_used;
+
+    if (contactId && tokenUsed) {
+      try {
+        console.log('💳 Restoring credits for cancelled booking:', {
+          contactId,
+          tokenUsed,
+          currentCredits: {
+            sj_credits: parseInt(contact.properties?.sj_credits) || 0,
+            cs_credits: parseInt(contact.properties?.cs_credits) || 0,
+            sjmini_credits: parseInt(contact.properties?.sjmini_credits) || 0,
+            shared_mock_credits: parseInt(contact.properties?.shared_mock_credits) || 0
+          }
+        });
+
+        const currentCredits = {
+          sj_credits: parseInt(contact.properties?.sj_credits) || 0,
+          cs_credits: parseInt(contact.properties?.cs_credits) || 0,
+          sjmini_credits: parseInt(contact.properties?.sjmini_credits) || 0,
+          shared_mock_credits: parseInt(contact.properties?.shared_mock_credits) || 0
+        };
+
+        creditsRestored = await hubspot.restoreCredits(contactId, tokenUsed, currentCredits);
+        console.log('✅ Credits restored successfully:', creditsRestored);
+      } catch (creditError) {
+        console.error('❌ Failed to restore credits:', creditError.message);
+        // Continue with cancellation even if credit restoration fails
+        // This ensures booking is still cancelled but admin may need to manually restore credits
+      }
+    } else {
+      console.warn('⚠️ Cannot restore credits: missing contactId or tokenUsed property');
+    }
+
     // Step 7: Perform soft delete (mark as cancelled)
     try {
       await hubspot.softDeleteBooking(bookingId);
@@ -550,8 +586,10 @@ async function handleDeleteRequest(req, res, hubspot, bookingId, contactId, cont
       actions_completed: {
         soft_delete: true,
         note_created: noteCreated,
-        bookings_decremented: bookingsDecremented
+        bookings_decremented: bookingsDecremented,
+        credits_restored: !!creditsRestored
       },
+      ...(creditsRestored ? { credit_restoration: creditsRestored } : {}),
       ...(reason ? { reason } : {})
     };
 

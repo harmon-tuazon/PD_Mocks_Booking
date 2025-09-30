@@ -241,7 +241,8 @@ class HubSpotService {
         name: bookingData.name,
         email: bookingData.email,
         dominant_hand: bookingData.dominantHand.toString(),
-        is_active: 'Active'  // Set booking as active when created
+        is_active: 'Active',  // Set booking as active when created
+        ...(bookingData.tokenUsed ? { token_used: bookingData.tokenUsed } : {})
       }
     };
 
@@ -435,9 +436,10 @@ class HubSpotService {
 
       // Batch retrieve booking objects to check their status
       // HubSpot will automatically exclude archived/deleted objects
+      // We also need to fetch is_active property to filter out cancelled bookings
       const batchReadPayload = {
         inputs: bookingIds.map(id => ({ id })),
-        properties: ['booking_id', 'hs_object_id']
+        properties: ['booking_id', 'hs_object_id', 'is_active']
       };
 
       const bookingsResponse = await this.apiCall(
@@ -446,10 +448,20 @@ class HubSpotService {
         batchReadPayload
       );
 
-      // Count only the bookings that were successfully retrieved (active ones)
-      const activeBookingsCount = bookingsResponse?.results?.length || 0;
+      if (!bookingsResponse?.results || bookingsResponse.results.length === 0) {
+        console.log(`No active bookings retrieved for mock exam ${mockExamId}`);
+        return 0;
+      }
 
-      console.log(`Mock exam ${mockExamId}: ${activeBookingsCount} active bookings out of ${bookingIds.length} associations`);
+      // Filter out cancelled bookings - only count bookings where is_active is "Active"
+      const activeBookings = bookingsResponse.results.filter(booking => {
+        const isActive = booking.properties.is_active;
+        return isActive === 'Active' || isActive === 'active';
+      });
+
+      const activeBookingsCount = activeBookings.length;
+
+      console.log(`Mock exam ${mockExamId}: ${activeBookingsCount} active bookings out of ${bookingIds.length} total associations (${bookingsResponse.results.length - activeBookingsCount} cancelled)`);
 
       return activeBookingsCount;
     } catch (error) {
@@ -740,8 +752,21 @@ class HubSpotService {
             will_include: filter === 'all' || filter === status
           });
 
-          if (filter === 'all' || filter === status) {
-            console.log(`✅ [FILTER DEBUG] Including booking ${booking.id} (status: ${status}, filter: ${filter})`);
+          // Determine if booking should be included based on filter and is_active status
+          const isActive = booking.properties.is_active;
+          const isCancelled = isActive === 'Cancelled' || isActive === 'cancelled';
+          
+          let shouldInclude = false;
+          if (filter === 'all') {
+            shouldInclude = true;  // All filter shows everything
+          } else if (filter === 'cancelled') {
+            shouldInclude = isCancelled;  // Cancelled filter shows only cancelled
+          } else if (filter === 'upcoming' || filter === 'past') {
+            shouldInclude = (filter === status) && !isCancelled;  // Time filters exclude cancelled
+          }
+
+          if (shouldInclude) {
+            console.log(`✅ [FILTER DEBUG] Including booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
             const mockExamData = {
               mock_type: booking.properties.mock_type,
               exam_date: booking.properties.exam_date,
@@ -757,7 +782,7 @@ class HubSpotService {
               finalStatus: this.mapBookingStatus(booking, mockExamData, status)
             });
           } else {
-            console.log(`❌ [FILTER DEBUG] Excluding booking ${booking.id} (status: ${status}, filter: ${filter})`);
+            console.log(`❌ [FILTER DEBUG] Excluding booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
           }
         } else {
           console.log(`⚠️ [BOOKING DEBUG] Booking ${booking.id} missing mock exam properties, will fetch via associations`);
@@ -886,8 +911,21 @@ class HubSpotService {
                 will_include: filter === 'all' || filter === status
               });
 
-              if (filter === 'all' || filter === status) {
-                console.log(`✅ [FILTER DEBUG] Including association booking ${booking.id} (status: ${status}, filter: ${filter})`);
+              // Determine if booking should be included based on filter and is_active status
+              const isActive = booking.properties.is_active || mockExam.properties.is_active;
+              const isCancelled = isActive === 'Cancelled' || isActive === 'cancelled';
+              
+              let shouldInclude = false;
+              if (filter === 'all') {
+                shouldInclude = true;  // All filter shows everything
+              } else if (filter === 'cancelled') {
+                shouldInclude = isCancelled;  // Cancelled filter shows only cancelled
+              } else if (filter === 'upcoming' || filter === 'past') {
+                shouldInclude = (filter === status) && !isCancelled;  // Time filters exclude cancelled
+              }
+
+              if (shouldInclude) {
+                console.log(`✅ [FILTER DEBUG] Including association booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
                 const mockExamData = {
                   id: mockExamId,
                   mock_type: mockExam.properties.mock_type,
@@ -906,7 +944,7 @@ class HubSpotService {
                   finalStatus: this.mapBookingStatus(booking, mockExamData, status)
                 });
               } else {
-                console.log(`❌ [FILTER DEBUG] Excluding association booking ${booking.id} (status: ${status}, filter: ${filter})`);
+                console.log(`❌ [FILTER DEBUG] Excluding association booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
               }
             } else {
               console.warn(`❌ No mock exam data found for booking ${booking.id} (${booking.properties.booking_id}), excluding from results`);
@@ -1077,6 +1115,8 @@ class HubSpotService {
             'email',
             'dominant_hand',
             'status',
+            'is_active',
+            'token_used',
             'createdate',
             'hs_lastmodifieddate'
           ]
@@ -1172,43 +1212,35 @@ class HubSpotService {
    * @param {object} currentCredits - Current credit values
    * @returns {Promise<object>} Result of credit restoration
    */
-  async restoreCredits(contactId, mockType, currentCredits) {
+  async restoreCredits(contactId, tokenUsed, currentCredits) {
     const creditUpdate = {};
     let creditType = '';
     let amount = 1;
 
-    // Determine which credit to restore based on mock type
-    switch (mockType) {
-      case 'Situational Judgment':
-        // Check if sj_credits was used (> 0) or shared_mock_credits
-        if (currentCredits.sj_credits > 0) {
-          creditType = 'sj_credits';
-          creditUpdate.sj_credits = currentCredits.sj_credits + 1;
-        } else {
-          creditType = 'shared_mock_credits';
-          creditUpdate.shared_mock_credits = (currentCredits.shared_mock_credits || 0) + 1;
-        }
-        break;
-        
-      case 'Clinical Skills':
-        // Check if cs_credits was used (> 0) or shared_mock_credits
-        if (currentCredits.cs_credits > 0) {
-          creditType = 'cs_credits';
-          creditUpdate.cs_credits = currentCredits.cs_credits + 1;
-        } else {
-          creditType = 'shared_mock_credits';
-          creditUpdate.shared_mock_credits = (currentCredits.shared_mock_credits || 0) + 1;
-        }
-        break;
-        
-      case 'Mini-mock':
-        creditType = 'sjmini_credits';
-        creditUpdate.sjmini_credits = (currentCredits.sjmini_credits || 0) + 1;
-        break;
-        
-      default:
-        throw new Error(`Unknown mock type: ${mockType}`);
+    // Map token_used value to credit field
+    const tokenToCreditFieldMapping = {
+      'Situational Judgment Token': 'sj_credits',
+      'Clinical Skills Token': 'cs_credits',
+      'Mini-mock Token': 'sjmini_credits',
+      'Shared Token': 'shared_mock_credits'
+    };
+
+    creditType = tokenToCreditFieldMapping[tokenUsed];
+
+    if (!creditType) {
+      throw new Error(`Unknown token type: ${tokenUsed}`);
     }
+
+    // Restore the credit to the appropriate field
+    const currentValue = parseInt(currentCredits[creditType]) || 0;
+    creditUpdate[creditType] = currentValue + 1;
+
+    console.log('💳 Restoring credit:', {
+      tokenUsed,
+      creditType,
+      currentValue,
+      newValue: creditUpdate[creditType]
+    });
 
     // Update contact with restored credits
     await this.apiCall({
@@ -1261,7 +1293,7 @@ class HubSpotService {
   }
 
   /**
-   * Create a cancellation note on the associated deal
+   * Create a cancellation note on the associated deal 
    * @param {string} dealId - The deal ID
    * @param {object} cancellationData - Cancellation details
    * @returns {Promise<void>}
@@ -1343,6 +1375,11 @@ ${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}
           <li><strong>Email:</strong> ${bookingData.email}</li>
         </ul>
 
+        <p><strong>Credit Information:</strong></p>
+        <ul>
+          <li><strong>Token Used:</strong> ${bookingData.tokenUsed || 'Not specified'}</li>
+        </ul>
+
         <hr style="margin: 15px 0; border: 0; border-top: 1px solid #e0e0e0;">
         <p style="font-size: 12px; color: #666;">
           <em>This booking was automatically confirmed through the Mock Exam Booking System.</em>
@@ -1420,7 +1457,7 @@ ${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}
 <li><strong>Exam Date:</strong> ${formattedDate}</li>
 <li><strong>Location:</strong> ${cancellationData.location || 'Location TBD'}</li>
 <li><strong>Cancelled At:</strong> ${new Date(timestamp).toLocaleString('en-US', { timeZone: 'America/Toronto'})}</li>
-${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}` : ''}</li>
+${cancellationData.reason ? `<li><strong>Reason:</strong> ${cancellationData.reason}</li>` : ''}
 </ul>
 
 <p><strong>Student Information:</strong></p>
@@ -1428,9 +1465,14 @@ ${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}
 <li><strong>Student:</strong> ${cancellationData.name || cancellationData.email || 'Student'}</li>
 </ul>
 
+<p><strong>Credit Information:</strong></p>
+<ul>
+<li><strong>Token Restored:</strong> ${cancellationData.token_used || 'Not specified'}</li>
+</ul>
+
 <hr style="margin: 15px 0; border: 0; border-top: 1px solid #e0e0e0;">
   <p style="font-size: 12px; color: #666;">
-  <em>🔄 Booking automatically marked as cancelled via booking management system</em>
+  <em>🔄 Booking automatically marked as cancelled via booking management system. Credit has been restored to your account.</em>
   </p>`;
 
     const notePayload = {

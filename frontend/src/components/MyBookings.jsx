@@ -695,14 +695,14 @@ const MyBookings = () => {
           </div>
         </div>
 
-        {/* Single Available Credits Card */}
+        {/* Single Available Tokens Card */}
         {Object.keys(creditInfo).length > 0 && (
           <div className="mb-6 sm:mb-8">
             <div className="max-w-md">
               <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
                 <div className="px-3 py-2 border-b">
-                  <h3 className="font-subheading text-sm font-medium text-primary-900">Available Credits</h3>
-                  <p className="font-body text-xs text-primary-600 mt-0.5">Your current credit balance</p>
+                  <h3 className="font-subheading text-sm font-medium text-primary-900">Available Tokens</h3>
+                  <p className="font-body text-xs text-primary-600 mt-0.5">Your current token balance</p>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -710,7 +710,7 @@ const MyBookings = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Credit Type
+                          Token Type
                         </th>
                         <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Amount
@@ -745,12 +745,12 @@ const MyBookings = () => {
                           </tr>
                         );
                       })}
-                      {/* Add standalone Shared Mock Credits row */}
+                      {/* Add standalone Shared Mock Tokens row */}
                       {credits && credits.shared_mock_credits !== undefined && (
                         <tr className={examTypes.length % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="px-2 py-1.5 whitespace-nowrap">
                             <div className="text-xs font-medium text-gray-900">
-                              Shared Mock Credits
+                              Shared Mock Tokens
                             </div>
                           </td>
                           <td className="px-2 py-1.5 whitespace-nowrap text-center">
@@ -769,7 +769,7 @@ const MyBookings = () => {
                 </div>
 
                 <div className="px-2 py-1 bg-gray-50 text-xs text-gray-500">
-                  Credits are automatically deducted when you book an exam.
+                  Tokens are automatically deducted when you book an exam.
                 </div>
               </div>
             </div>

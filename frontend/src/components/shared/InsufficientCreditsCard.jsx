@@ -50,12 +50,12 @@ const InsufficientCreditsCard = ({ mockType = 'mock exam', onContactSupport, cla
 
           {/* Main Message */}
           <h1 className="font-headline text-h2 font-bold text-coral-800 mb-4">
-            Insufficient Credits
+            Insufficient Tokens
           </h1>
           <p className="font-body text-lg text-coral-700 mb-8 leading-relaxed">
-            You don't have enough credits to book this {mockType}.
+            You don't have enough tokens to book this {mockType}.
             <br />
-            Please contact our academic advisors for assistance with your credit requirements.
+            Please contact our academic advisors for assistance with your token requirements.
           </p>
 
           {/* Contact Information Section */}
@@ -156,7 +156,7 @@ const InsufficientCreditsCard = ({ mockType = 'mock exam', onContactSupport, cla
                     Why am I seeing this?
                   </h3>
                   <p className="font-body text-sm text-primary-700 leading-relaxed">
-                    Your account doesn't have sufficient credits for this exam type. Our academic advisors can help you understand your credit balance and guide you through purchasing additional credits if needed.
+                    Your account doesn't have sufficient tokens for this exam type. Our academic advisors can help you understand your token balance and guide you through purchasing additional tokens if needed.
                   </p>
                 </div>
               </div>

@@ -211,17 +211,17 @@ const BookingForm = () => {
           </div>
         )}
 
-        {/* Credit validation and booking flow */}
+        {/* Token validation and booking flow */}
         {step === 'verify' && (
           <div className="card-brand animate-fade-in">
             <div className="text-center">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
-              <p className="text-body font-body text-gray-700">Verifying your credits...</p>
+              <p className="text-body font-body text-gray-700">Verifying your tokens...</p>
             </div>
           </div>
         )}
 
-        {/* Booking Details - after credits verified */}
+        {/* Booking Details - after tokens verified */}
         {step === 'details' && (
           <div className="space-y-6 animate-fade-in">
             {/* Credit Alert */}

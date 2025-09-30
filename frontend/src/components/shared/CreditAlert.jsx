@@ -59,22 +59,22 @@ const CreditAlert = ({ credits, creditBreakdown, mockType, variant = 'info' }) =
     }
   };
 
-  // Get credit type names based on mock type
-  const getSpecificCreditName = (type) => {
+  // Get token type names based on mock type
+  const getSpecificTokenName = (type) => {
     switch (type) {
       case 'Situational Judgment':
-        return 'SJ Credits';
+        return 'SJ Tokens';
       case 'Clinical Skills':
-        return 'CS Credits';
+        return 'CS Tokens';
       case 'Mini-mock':
-        return 'Mini-Mock Credits';
+        return 'Mini-Mock Tokens';
       default:
-        return 'Specific Credits';
+        return 'Specific Tokens';
     }
   };
 
   const { specific_credits = 0, shared_credits = 0 } = creditBreakdown;
-  const specificCreditName = getSpecificCreditName(mockType);
+  const specificTokenName = getSpecificTokenName(mockType);
 
   return (
     <div className={`border rounded-lg overflow-hidden ${styles.container}`}>
@@ -85,7 +85,7 @@ const CreditAlert = ({ credits, creditBreakdown, mockType, variant = 'info' }) =
           </div>
           <div className="ml-2 flex-1">
             <h3 className={`font-subheading text-sm font-medium ${styles.text}`}>
-              {credits > 0 ? 'Credit Verification Successful' : 'Insufficient Credits'}
+              {credits > 0 ? 'Token Verification Successful' : 'Insufficient Tokens'}
             </h3>
             <div className={`mt-2 ${styles.text}`}>
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -93,7 +93,7 @@ const CreditAlert = ({ credits, creditBreakdown, mockType, variant = 'info' }) =
                   <tbody className="divide-y divide-gray-200">
                     <tr className="bg-white">
                       <td className="px-2 py-1.5 text-xs font-medium text-gray-900">
-                        {specificCreditName}
+                        {specificTokenName}
                       </td>
                       <td className="px-2 py-1.5 text-xs text-right">
                         <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
@@ -108,7 +108,7 @@ const CreditAlert = ({ credits, creditBreakdown, mockType, variant = 'info' }) =
                     {mockType !== 'Mini-mock' && (
                       <tr className="bg-gray-50">
                         <td className="px-2 py-1.5 text-xs font-medium text-gray-900">
-                          Shared Mock Credits
+                          Shared Mock Tokens
                         </td>
                         <td className="px-2 py-1.5 text-xs text-right">
                           <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
@@ -140,7 +140,7 @@ const CreditAlert = ({ credits, creditBreakdown, mockType, variant = 'info' }) =
               </div>
               {credits > 0 && (
                 <p className="mt-2 font-body text-xs text-gray-600">
-                  You have sufficient credits to book this exam.
+                  You have sufficient tokens to book this exam.
                 </p>
               )}
             </div>

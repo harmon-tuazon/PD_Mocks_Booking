@@ -7,31 +7,31 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
 
   const { specific_credits = 0, shared_credits = 0 } = creditBreakdown;
 
-  // Get the specific credit type name based on mock type
-  const getSpecificCreditName = (type) => {
+  // Get the specific token type name based on mock type
+  const getSpecificTokenName = (type) => {
     switch (type) {
       case 'Situational Judgment':
-        return 'SJ Credits';
+        return 'SJ Tokens';
       case 'Clinical Skills':
-        return 'CS Credits';
+        return 'CS Tokens';
       case 'Mini-mock':
-        return 'Mini-Mock Credits';
+        return 'Mini-Mock Tokens';
       default:
-        return 'Specific Credits';
+        return 'Specific Tokens';
     }
   };
 
   const tokenData = [
     {
-      type: getSpecificCreditName(mockType),
+      type: getSpecificTokenName(mockType),
       amount: specific_credits,
     },
   ];
 
-  // Only add shared mock credits for non-mini-mock types
+  // Only add shared mock tokens for non-mini-mock types
   if (mockType !== 'Mini-mock') {
     tokenData.push({
-      type: 'Shared Mock Credits',
+      type: 'Shared Mock Tokens',
       amount: shared_credits,
     });
   }
@@ -42,7 +42,7 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
     return (
       <div className={`bg-white border rounded-lg overflow-hidden shadow-sm ${className}`}>
         <div className="px-3 py-2 border-b">
-          <h3 className="font-subheading text-sm font-medium text-primary-900">Available Credits</h3>
+          <h3 className="font-subheading text-sm font-medium text-primary-900">Available Tokens</h3>
           <p className="font-body text-xs text-primary-600 mt-0.5">Your current balance</p>
         </div>
         <div className="p-3">
@@ -72,7 +72,7 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
           </div>
         </div>
         <div className="px-3 py-1.5 bg-gray-50 text-xs text-gray-500">
-          Credits deducted automatically
+          Tokens deducted automatically
         </div>
       </div>
     );
@@ -81,8 +81,8 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
   return (
     <div className={`bg-white border rounded-lg overflow-hidden shadow-sm ${className}`}>
       <div className="px-3 py-2 border-b">
-        <h3 className="font-subheading text-sm font-medium text-primary-900">Available Credits</h3>
-        <p className="font-body text-xs text-primary-600 mt-0.5">Your current credit balance</p>
+        <h3 className="font-subheading text-sm font-medium text-primary-900">Available Tokens</h3>
+        <p className="font-body text-xs text-primary-600 mt-0.5">Your current token balance</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -90,7 +90,7 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
           <thead className="bg-gray-50">
             <tr>
               <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Credit Type
+                Token Type
               </th>
               <th className="px-2 py-1.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Amount
@@ -137,7 +137,7 @@ const TokenCard = ({ creditBreakdown, mockType, compact = false, className = "" 
       </div>
 
       <div className="px-2 py-1 bg-gray-50 text-xs text-gray-500">
-        Credits are automatically deducted when you book an exam.
+        Tokens are automatically deducted when you book an exam.
       </div>
     </div>
   );

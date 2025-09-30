@@ -82,7 +82,7 @@ const BookingConfirmation = () => {
               </div>
               {bookingData.remainingCredits !== undefined && (
                 <div className="flex justify-between pt-3 border-t">
-                  <dt className="font-body text-sm font-medium text-primary-600">Remaining Credits</dt>
+                  <dt className="font-body text-sm font-medium text-primary-600">Remaining Tokens</dt>
                   <dd className="font-body text-sm font-semibold text-teal-700">{bookingData.remainingCredits}</dd>
                 </div>
               )}

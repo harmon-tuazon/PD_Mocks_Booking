@@ -50,8 +50,8 @@ const DeleteBookingModal = ({
     return booking.mockExam?.campus || booking.location || booking.campus || 'Location TBD';
   };
 
-  // Get credits to restore (if available)
-  const getCreditsToRestore = (booking) => {
+  // Get tokens to restore (if available)
+  const getTokensToRestore = (booking) => {
     if (!booking) return null;
     return booking.creditsUsed || booking.credits_used || booking.credits || null;
   };
@@ -96,7 +96,7 @@ const DeleteBookingModal = ({
   const examDate = getExamDate(booking);
   const examType = getExamType(booking);
   const location = getLocation(booking);
-  const creditsToRestore = getCreditsToRestore(booking);
+  const tokensToRestore = getTokensToRestore(booking);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -162,12 +162,12 @@ const DeleteBookingModal = ({
                       <span>{location}</span>
                     </div>
 
-                    {/* Credits to Restore */}
-                    {creditsToRestore && (
+                    {/* Tokens to Restore */}
+                    {tokensToRestore && (
                       <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
                         <FiRefreshCw className="w-4 h-4 text-green-600" />
                         <span className="text-sm font-medium text-green-700">
-                          {creditsToRestore} credit{creditsToRestore !== 1 ? 's' : ''} will be restored
+                          {tokensToRestore} token{tokensToRestore !== 1 ? 's' : ''} will be restored
                         </span>
                       </div>
                     )}
