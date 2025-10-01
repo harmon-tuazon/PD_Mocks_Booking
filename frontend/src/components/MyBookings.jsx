@@ -3,19 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { getUserSession, clearUserSession } from '../utils/auth';
 import apiService, { normalizeBooking, formatBookingNumber, getBookingStatus, formatTimeRange as apiFormatTimeRange } from '../services/api';
 import BookingsCalendarView from './bookings/BookingsCalendarView';
-import TokenCard from './shared/TokenCard';
 import CapacityBadge from './shared/CapacityBadge';
 import ResponsiveLogo from './shared/Logo';
 import { DeleteBookingModal } from './shared';
 
+
 const MyBookings = () => {
   const navigate = useNavigate();
 
-  // Exam types for credit fetching
+  // Exam types for credit display
   const examTypes = [
-    { type: 'Situational Judgment' },
-    { type: 'Clinical Skills' },
-    { type: 'Mini-mock' }
+    { type: 'Situational Judgment', key: 'sj' },
+    { type: 'Clinical Skills', key: 'cs' },
+    { type: 'Mini-mock', key: 'sjmini' }
   ];
 
   // Authentication state
@@ -29,7 +29,6 @@ const MyBookings = () => {
   // Bookings state
   const [bookings, setBookings] = useState([]);
   const [credits, setCredits] = useState(null);
-  const [creditInfo, setCreditInfo] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -60,30 +59,9 @@ const MyBookings = () => {
       setUserSession(session);
       setIsAuthenticated(true);
       fetchBookings(session.studentId, session.email);
-      fetchCreditInfo(session);
     }
     setIsInitialLoad(false);
   }, []);
-
-  // Fetch exam-type specific credit information
-  const fetchCreditInfo = async (userData) => {
-    try {
-      const creditData = {};
-      for (const examType of examTypes) {
-        const result = await apiService.mockExams.validateCredits(
-          userData.studentId,
-          userData.email,
-          examType.type
-        );
-        if (result.success) {
-          creditData[examType.type] = result.data.credit_breakdown;
-        }
-      }
-      setCreditInfo(creditData);
-    } catch (error) {
-      console.error('Error fetching credit information:', error);
-    }
-  };
 
   // Authenticate user
   const handleAuthentication = async (e) => {
@@ -114,9 +92,8 @@ const MyBookings = () => {
         // Set credits from response
         setCredits(response.data.credit_breakdown);
 
-        // Fetch bookings and credit info
+        // Fetch bookings
         await fetchBookings(userData.studentId, userData.email);
-        await fetchCreditInfo(userData);
       }
     } catch (err) {
       console.error('Authentication error:', err);
@@ -184,7 +161,6 @@ const MyBookings = () => {
     setUserSession(null);
     setBookings([]);
     setCredits(null);
-    setCreditInfo({});
     setStudentId('');
     setEmail('');
     setFilter('all');
@@ -238,13 +214,8 @@ const MyBookings = () => {
         setDeleteModalOpen(false);
         setBookingToDelete(null);
 
-        // Refresh bookings list
+        // Refresh bookings list - this will also refresh credits
         await fetchBookings(userSession.studentId, userSession.email, currentPage);
-
-        // Refresh credit info to show restored credits
-        if (userSession) {
-          await fetchCreditInfo(userSession);
-        }
       } else {
         throw new Error(response.message || 'Failed to cancel booking');
       }
@@ -424,6 +395,19 @@ const MyBookings = () => {
     }
   };
 
+  // Sort arrow components
+  const SortArrowUp = () => (
+    <svg className="w-3 h-3 inline ml-1" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+    </svg>
+  );
+
+  const SortArrowDown = () => (
+    <svg className="w-3 h-3 inline ml-1" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+    </svg>
+  );
+
   // Sort icon component
   const SortIcon = ({ field }) => {
     if (sortField !== field) {
@@ -434,15 +418,7 @@ const MyBookings = () => {
       );
     }
 
-    return sortDirection === 'asc' ? (
-      <svg className="w-4 h-4 ml-1 text-blue-600 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-      </svg>
-    ) : (
-      <svg className="w-4 h-4 ml-1 text-blue-600 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-      </svg>
-    );
+    return sortDirection === 'asc' ? <SortArrowUp /> : <SortArrowDown />;
   };
 
   // Get booking status badge
@@ -665,7 +641,7 @@ const MyBookings = () => {
             <div className="text-center">
               <button
                 type="button"
-                onClick={() => navigate('/book')}
+                onClick={() => navigate('/book/exam-types')}
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
                 Don't have any bookings? Book a mock exam →
@@ -696,7 +672,7 @@ const MyBookings = () => {
         </div>
 
         {/* Single Available Tokens Card */}
-        {Object.keys(creditInfo).length > 0 && (
+        {credits && (
           <div className="mb-6 sm:mb-8">
             <div className="max-w-md">
               <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
@@ -719,12 +695,16 @@ const MyBookings = () => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {examTypes.map((examType, index) => {
-                        const breakdown = creditInfo[examType.type];
-                        if (!breakdown) return null;
+                        // Get credits for this exam type (specific credits only)
+                        let specific = 0;
 
-                        const specific = breakdown.specific_credits || 0;
-                        const shared = examType.type === 'Mini-mock' ? 0 : (breakdown.shared_credits || 0);
-                        const total = specific + shared;
+                        if (examType.type === 'Situational Judgment') {
+                          specific = credits.sj_credits || 0;
+                        } else if (examType.type === 'Clinical Skills') {
+                          specific = credits.cs_credits || 0;
+                        } else if (examType.type === 'Mini-mock') {
+                          specific = credits.sjmini_credits || 0;
+                        }
 
                         return (
                           <tr key={examType.type} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -735,11 +715,11 @@ const MyBookings = () => {
                             </td>
                             <td className="px-2 py-1.5 whitespace-nowrap text-center">
                               <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
-                                total > 0
+                                specific > 0
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {total}
+                                {specific}
                               </span>
                             </td>
                           </tr>
@@ -769,7 +749,7 @@ const MyBookings = () => {
                 </div>
 
                 <div className="px-2 py-1 bg-gray-50 text-xs text-gray-500">
-                  Tokens are automatically deducted when you book an exam.
+                  Specific tokens are for each exam type. Shared tokens can be used for SJ or CS exams.
                 </div>
               </div>
             </div>
@@ -993,10 +973,10 @@ const MyBookings = () => {
                 <div className="hidden md:block bg-white border rounded-lg overflow-hidden shadow-sm">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-navy-50 border-b border-gray-200">
                         <tr>
                           <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            className="px-6 py-3 text-left text-xs font-medium text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
                             onClick={() => handleSort('booking_number')}
                           >
                             <div className="flex items-center">
@@ -1005,7 +985,7 @@ const MyBookings = () => {
                             </div>
                           </th>
                           <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            className="px-6 py-3 text-left text-xs font-medium text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
                             onClick={() => handleSort('exam_type')}
                           >
                             <div className="flex items-center">
@@ -1014,7 +994,7 @@ const MyBookings = () => {
                             </div>
                           </th>
                           <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            className="px-6 py-3 text-left text-xs font-medium text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
                             onClick={() => handleSort('date_time')}
                           >
                             <div className="flex items-center">
@@ -1023,7 +1003,7 @@ const MyBookings = () => {
                             </div>
                           </th>
                           <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            className="px-6 py-3 text-left text-xs font-medium text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
                             onClick={() => handleSort('location')}
                           >
                             <div className="flex items-center">
@@ -1032,7 +1012,7 @@ const MyBookings = () => {
                             </div>
                           </th>
                           <th
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                            className="px-6 py-3 text-left text-xs font-medium text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
                             onClick={() => handleSort('status')}
                           >
                             <div className="flex items-center">
@@ -1040,7 +1020,7 @@ const MyBookings = () => {
                               <SortIcon field="status" />
                             </div>
                           </th>
-                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3 text-center text-xs font-medium text-navy-900 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>

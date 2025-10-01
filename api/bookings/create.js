@@ -96,7 +96,8 @@ module.exports = module.exports = async function handler(req, res) {
       email,
       exam_date,
       mock_type,
-      dominant_hand
+      dominant_hand,
+      attending_location
     } = validatedData;
 
     // Logging
@@ -107,7 +108,8 @@ module.exports = module.exports = async function handler(req, res) {
       email: sanitizeInput(email),
       exam_date,
       mock_type,
-      dominant_hand
+      dominant_hand: dominant_hand !== undefined ? dominant_hand : null,
+      attending_location: attending_location || null
     });
 
     // Sanitize inputs
@@ -210,14 +212,20 @@ module.exports = module.exports = async function handler(req, res) {
       currentValue: parseInt(contact.properties[creditField]) || 0
     });
 
-    // Step 5: Create booking with token_used property
+    // Step 5: Create booking with token_used property and conditional fields
     const bookingData = {
       bookingId,
       name: sanitizedName,
       email: sanitizedEmail,
-      dominantHand: dominant_hand,
       tokenUsed: tokenUsed
     };
+
+    // Add conditional fields based on exam type
+    if (mock_type === 'Clinical Skills') {
+      bookingData.dominantHand = dominant_hand;
+    } else if (mock_type === 'Situational Judgment' || mock_type === 'Mini-mock') {
+      bookingData.attendingLocation = attending_location;
+    }
 
     const createdBooking = await hubspot.createBooking(bookingData);
     bookingCreated = true;

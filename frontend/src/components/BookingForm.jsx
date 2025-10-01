@@ -6,6 +6,7 @@ import SessionTimer from './shared/SessionTimer';
 import Logo from './shared/Logo';
 import InsufficientCreditsCard from './shared/InsufficientCreditsCard';
 import LoggedInUserCard from './shared/LoggedInUserCard';
+import LocationSelector from './shared/LocationSelector';
 import { formatDate } from '../services/api';
 
 import { getUserSession, clearUserSession } from '../utils/auth';
@@ -35,6 +36,11 @@ const BookingForm = () => {
   } = useBookingFlow(mockExamId, mockType);
 
   const [dominantHand, setDominantHand] = useState(null);
+  const [attendingLocation, setAttendingLocation] = useState(null);
+
+  // Determine which field is needed based on exam type
+  const isClinicalSkills = mockType === 'Clinical Skills';
+  const isLocationBased = ['Situational Judgment', 'Mini-mock'].includes(mockType);
 
   // Load user session on component mount
   useEffect(() => {
@@ -62,18 +68,32 @@ const BookingForm = () => {
   const handleSubmitBooking = async (e) => {
     e.preventDefault();
 
-    if (dominantHand === null) {
+    // Validate based on exam type
+    if (isClinicalSkills && dominantHand === null) {
       alert('Please select your dominant hand');
       return;
     }
 
+    if (isLocationBased && !attendingLocation) {
+      alert('Please select your attending location');
+      return;
+    }
+
     // Update booking data with all required information from session
-    updateBookingData({
+    const bookingPayload = {
       name: userSession?.studentName || 'Student',
       studentId: userSession?.studentId || '',
-      email: userSession?.email || '',
-      dominantHand: dominantHand
-    });
+      email: userSession?.email || ''
+    };
+
+    // Add conditional field based on exam type
+    if (isClinicalSkills) {
+      bookingPayload.dominantHand = dominantHand;
+    } else if (isLocationBased) {
+      bookingPayload.attendingLocation = attendingLocation;
+    }
+
+    updateBookingData(bookingPayload);
 
     const result = await submitBooking();
     if (result) {
@@ -239,42 +259,61 @@ const BookingForm = () => {
               </h2>
 
               <form onSubmit={handleSubmitBooking} className="space-brand">
-                <div className="form-field">
-                  <label className="text-sm font-subheading font-medium text-navy-700 mb-1 block">
-                    Dominant Hand *
-                  </label>
-                  <div className="flex flex-col space-y-3">
-                    <label className="inline-flex items-center">
-                      <input
-                        type="radio"
-                        name="dominantHand"
-                        value="true"
-                        checked={dominantHand === true}
-                        onChange={() => setDominantHand(true)}
-                        className="form-radio h-4 w-4 text-primary-600 focus-brand"
-                        required
-                      />
-                      <span className="ml-2 text-body font-body text-gray-800">Right-handed</span>
+                {/* Conditional Field: Dominant Hand for Clinical Skills */}
+                {isClinicalSkills && (
+                  <div className="form-field">
+                    <label className="text-sm font-subheading font-medium text-navy-700 mb-1 block">
+                      Which is your dominant hand? *
                     </label>
-                    <label className="inline-flex items-center">
-                      <input
-                        type="radio"
-                        name="dominantHand"
-                        value="false"
-                        checked={dominantHand === false}
-                        onChange={() => setDominantHand(false)}
-                        className="form-radio h-4 w-4 text-primary-600 focus-brand"
-                        required
-                      />
-                      <span className="ml-2 text-body font-body text-gray-800">Left-handed</span>
-                    </label>
+                    <div className="flex flex-col space-y-3">
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          name="dominantHand"
+                          value="true"
+                          checked={dominantHand === true}
+                          onChange={() => setDominantHand(true)}
+                          className="form-radio h-4 w-4 text-primary-600 focus-brand"
+                          required
+                        />
+                        <span className="ml-2 text-body font-body text-gray-800">Right-handed</span>
+                      </label>
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          name="dominantHand"
+                          value="false"
+                          checked={dominantHand === false}
+                          onChange={() => setDominantHand(false)}
+                          className="form-radio h-4 w-4 text-primary-600 focus-brand"
+                          required
+                        />
+                        <span className="ml-2 text-body font-body text-gray-800">Left-handed</span>
+                      </label>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Conditional Field: Location for SJ/Mini-mock */}
+                {isLocationBased && (
+                  <div className="w-full">
+                    <LocationSelector
+                      value={attendingLocation}
+                      onChange={setAttendingLocation}
+                      required
+                    />
+                  </div>
+                )}
 
                 <div className="pt-4 col-span-full">
                   <button
                     type="submit"
-                    disabled={loading || !canProceed || dominantHand === null}
+                    disabled={
+                      loading ||
+                      !canProceed ||
+                      (isClinicalSkills && dominantHand === null) ||
+                      (isLocationBased && !attendingLocation)
+                    }
                     className="btn-brand-primary w-full"
                   >
                     {loading ? (

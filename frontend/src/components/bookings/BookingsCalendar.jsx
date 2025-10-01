@@ -242,7 +242,8 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
     const isDateToday = isToday(date);
     const isPast = isBefore(date, startOfDay(new Date()));
 
-    let classes = 'min-h-[80px] p-2 border-2 rounded-lg transition-all duration-200 ';
+    // Mobile-first with larger touch targets (min 48px on mobile)
+    let classes = 'min-h-[60px] sm:min-h-[80px] md:min-h-[90px] p-1 sm:p-2 border sm:border-2 rounded-md sm:rounded-lg transition-all duration-200 ';
 
     if (isPast) {
       if (hasBookings) {
@@ -263,21 +264,21 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
       // Future/current dates with bookings - strong green highlight with intensity
       const intensity = Math.min(bookingCount, 3);
       if (intensity === 1) {
-        classes += 'bg-green-100 border-green-400 hover:bg-green-200 cursor-pointer hover:shadow-lg hover:border-green-500 transform hover:scale-[1.02] ';
+        classes += 'bg-green-100 border-green-400 hover:bg-green-200 cursor-pointer hover:shadow-lg hover:border-green-500 sm:transform sm:hover:scale-[1.02] ';
       } else if (intensity === 2) {
-        classes += 'bg-green-200 border-green-500 hover:bg-green-300 cursor-pointer hover:shadow-lg hover:border-green-600 transform hover:scale-[1.02] ';
+        classes += 'bg-green-200 border-green-500 hover:bg-green-300 cursor-pointer hover:shadow-lg hover:border-green-600 sm:transform sm:hover:scale-[1.02] ';
       } else {
-        classes += 'bg-green-300 border-green-600 hover:bg-green-400 cursor-pointer hover:shadow-xl hover:border-green-700 transform hover:scale-[1.02] ';
+        classes += 'bg-green-300 border-green-600 hover:bg-green-400 cursor-pointer hover:shadow-xl hover:border-green-700 sm:transform sm:hover:scale-[1.02] ';
       }
 
       if (isDateToday) {
-        classes += 'ring-2 ring-green-600 ring-offset-2 shadow-lg ';
+        classes += 'ring-1 sm:ring-2 ring-green-600 ring-offset-1 sm:ring-offset-2 shadow-lg ';
       }
     } else {
       // Future/current dates without bookings - very inactive
       classes += 'bg-gray-50 border-gray-300 text-gray-400 cursor-not-allowed opacity-30 ';
       if (isDateToday) {
-        classes += 'ring-2 ring-gray-400 ring-offset-1 ';
+        classes += 'ring-1 sm:ring-2 ring-gray-400 ring-offset-1 ';
       }
     }
 
@@ -352,44 +353,44 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
 
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Enhanced Statistics Component
+  // Enhanced Statistics Component with Mobile Optimization
   const StatisticsPanel = () => (
-    <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-lg p-4 mb-6 border-2 border-green-300 shadow-md">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">📊 Booking Statistics</h3>
+    <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6 border sm:border-2 border-green-300 shadow-md">
+      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4 text-center">📊 Booking Statistics</h3>
 
-      {/* Main Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-        <div className="text-center bg-white rounded-lg p-2 border border-green-200">
-          <div className="text-2xl font-bold text-green-700">{bookingStats.total}</div>
-          <div className="text-sm text-gray-600 font-medium">Total Bookings</div>
+      {/* Main Stats Row - Better mobile grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-3 sm:mb-4">
+        <div className="text-center bg-white rounded-lg p-2 sm:p-3 border border-green-200">
+          <div className="text-xl sm:text-2xl font-bold text-green-700">{bookingStats.total}</div>
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">Total</div>
         </div>
-        <div className="text-center bg-white rounded-lg p-2 border border-teal-200">
-          <div className="text-2xl font-bold text-teal-700">{bookingStats.thisMonth}</div>
-          <div className="text-sm text-gray-600 font-medium">This Month</div>
+        <div className="text-center bg-white rounded-lg p-2 sm:p-3 border border-teal-200">
+          <div className="text-xl sm:text-2xl font-bold text-teal-700">{bookingStats.thisMonth}</div>
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">This Month</div>
         </div>
-        <div className="text-center bg-white rounded-lg p-2 border border-blue-200">
-          <div className="text-2xl font-bold text-blue-700">{bookingStats.upcoming}</div>
-          <div className="text-sm text-gray-600 font-medium">Upcoming</div>
+        <div className="text-center bg-white rounded-lg p-2 sm:p-3 border border-blue-200">
+          <div className="text-xl sm:text-2xl font-bold text-blue-700">{bookingStats.upcoming}</div>
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">Upcoming</div>
         </div>
-        <div className="text-center bg-white rounded-lg p-2 border border-emerald-200">
-          <div className="text-2xl font-bold text-emerald-700">{bookingStats.completed}</div>
-          <div className="text-sm text-gray-600 font-medium">Completed</div>
+        <div className="text-center bg-white rounded-lg p-2 sm:p-3 border border-emerald-200">
+          <div className="text-xl sm:text-2xl font-bold text-emerald-700">{bookingStats.completed}</div>
+          <div className="text-xs sm:text-sm text-gray-600 font-medium">Completed</div>
         </div>
       </div>
 
-      {/* Exam Type Breakdown */}
-      <div className="pt-4 border-t border-primary-200">
-        <h4 className="text-sm font-medium text-gray-700 mb-2 text-center">By Exam Type</h4>
-        <div className="grid grid-cols-3 gap-3 text-center">
+      {/* Exam Type Breakdown - Responsive layout */}
+      <div className="pt-3 sm:pt-4 border-t border-primary-200">
+        <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2 text-center">By Exam Type</h4>
+        <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
           {Object.entries(bookingStats.byType).filter(([_, count]) => count > 0).map(([type, count]) => {
             const config = getMockTypeConfig(type);
             return (
               <div key={type} className="flex flex-col items-center space-y-1">
-                <div className={`w-8 h-8 rounded-full ${config.baseColor} text-white flex items-center justify-center text-xs font-bold`}>
+                <div className={`w-6 sm:w-8 h-6 sm:h-8 rounded-full ${config.baseColor} text-white flex items-center justify-center text-[10px] sm:text-xs font-bold`}>
                   {config.abbr}
                 </div>
-                <div className="text-lg font-bold text-gray-800">{count}</div>
-                <div className="text-xs text-gray-600 leading-tight">{type.replace(' Mock', '-mock')}</div>
+                <div className="text-sm sm:text-lg font-bold text-gray-800">{count}</div>
+                <div className="text-[10px] sm:text-xs text-gray-600 leading-tight max-w-[60px] sm:max-w-none">{type.replace(' Mock', '-mock')}</div>
               </div>
             );
           })}
@@ -603,49 +604,51 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
       {/* Enhanced Statistics Panel */}
       <StatisticsPanel />
 
-      <div className="card-brand border-2 border-gray-200 shadow-lg">
-        <div className="p-4 sm:p-6">
-          {/* Calendar Header */}
-          <div className="flex items-center justify-between mb-6">
+      <div className="card-brand border sm:border-2 border-gray-200 shadow-lg">
+        <div className="p-3 sm:p-4 md:p-6">
+          {/* Calendar Header - Mobile optimized */}
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
             <button
               onClick={() => navigateMonth(-1)}
-              className="p-2 hover:bg-green-50 rounded-lg transition-colors text-gray-700 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 border border-gray-300"
+              className="p-1.5 sm:p-2 hover:bg-green-50 rounded-md sm:rounded-lg transition-colors text-gray-700 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 border border-gray-300"
               aria-label="Previous month"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
 
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <h2 className="text-base sm:text-xl font-bold text-gray-900 flex items-center gap-1 sm:gap-2">
+              <svg className="w-4 sm:w-5 h-4 sm:h-5 text-green-600 hidden sm:inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              {format(currentDate, 'MMMM yyyy')}
+              <span className="hidden sm:inline">{format(currentDate, 'MMMM yyyy')}</span>
+              <span className="sm:hidden">{format(currentDate, 'MMM yyyy')}</span>
             </h2>
 
             <button
               onClick={() => navigateMonth(1)}
-              className="p-2 hover:bg-green-50 rounded-lg transition-colors text-gray-700 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 border border-gray-300"
+              className="p-1.5 sm:p-2 hover:bg-green-50 rounded-md sm:rounded-lg transition-colors text-gray-700 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 border border-gray-300"
               aria-label="Next month"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           </div>
 
-          {/* Week Days Header */}
-          <div className="grid grid-cols-7 gap-1 mb-2 border-b-2 border-gray-200 pb-2">
-            {weekDays.map(day => (
-              <div key={day} className="text-center text-xs sm:text-sm font-semibold text-gray-700 py-2">
-                {day}
+          {/* Week Days Header - Mobile abbreviations */}
+          <div className="grid grid-cols-7 gap-0 sm:gap-1 mb-2 border-b sm:border-b-2 border-gray-200 pb-1 sm:pb-2">
+            {weekDays.map((day, index) => (
+              <div key={day} className="text-center text-[10px] sm:text-xs md:text-sm font-semibold text-gray-700 py-1 sm:py-2">
+                <span className="sm:hidden">{day.charAt(0)}</span>
+                <span className="hidden sm:inline">{day}</span>
               </div>
             ))}
           </div>
 
-          {/* Calendar Days Grid */}
-          <div className="grid grid-cols-7 gap-1">
+          {/* Calendar Days Grid - Mobile optimized */}
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {calendarDays.map((date, index) => {
               const dateKey = date ? format(date, 'yyyy-MM-dd') : null;
               const dayBookings = dateKey ? bookingsByDate[dateKey] : null;
@@ -664,17 +667,17 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
                 >
                   {date && (
                     <>
-                      {/* Date Number with green indicator for bookings */}
-                      <div className="flex justify-between items-start mb-1">
-                        <span className={`text-xs sm:text-sm font-semibold ${
+                      {/* Date Number with green indicator for bookings - Mobile optimized */}
+                      <div className="flex justify-between items-start mb-0.5 sm:mb-1">
+                        <span className={`text-[11px] sm:text-xs md:text-sm font-semibold ${
                           isToday(date)
-                            ? hasBookings ? 'text-green-800 font-bold text-base' : 'text-primary-700 font-bold'
+                            ? hasBookings ? 'text-green-800 font-bold text-xs sm:text-base' : 'text-primary-700 font-bold'
                             : hasBookings ? 'text-gray-900 font-medium' : 'text-gray-400'
                         }`}>
                           {format(date, 'd')}
                         </span>
                         {bookingCount > 0 && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold shadow-sm ${
+                          <span className={`text-[9px] sm:text-xs px-1 sm:px-1.5 py-0 sm:py-0.5 rounded-full font-bold shadow-sm ${
                             bookingCount === 1
                               ? 'bg-green-200 text-green-800 border border-green-300'
                               : bookingCount === 2
@@ -686,58 +689,88 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
                         )}
                       </div>
 
-                      {/* Booking Indicators with Enhanced Visual Design */}
+                      {/* Booking Indicators - Simplified for mobile */}
                       {dayBookings && (
-                        <div className="space-y-1">
-                          {dayBookings.slice(0, 2).map((booking, idx) => {
-                            const config = getMockTypeConfig(booking.mock_type, bookingCount);
-                            const isPast = isPastBooking(booking);
-
-                            return (
+                        <div className="space-y-0.5 sm:space-y-1">
+                          {/* On mobile, show just first booking or count badge */}
+                          <div className="sm:hidden">
+                            {bookingCount === 1 ? (
                               <div
-                                key={booking.id || idx}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleBookingClick(booking);
+                                  handleBookingClick(dayBookings[0]);
                                 }}
-                                className={`relative flex items-center gap-1 px-1.5 py-1 rounded-md text-xs cursor-pointer hover:shadow-md transition-all duration-200 transform hover:scale-105 ${
-                                  config.bg
-                                } ${config.border} border-2 ${isPast ? 'opacity-70' : ''}`}
-                                title={`${booking.mock_type} - ${formatTime(booking.start_time)} ${isPast ? '(Past)' : ''}`}
+                                className="flex items-center justify-center"
                               >
-                                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${config.dot} text-white shadow-sm`}>
-                                  {config.abbr.charAt(0)}
+                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold ${getMockTypeConfig(dayBookings[0].mock_type).baseColor} text-white shadow-sm`}>
+                                  {getMockTypeConfig(dayBookings[0].mock_type).abbr}
                                 </span>
-                                <span className={`hidden sm:inline truncate ${config.text} font-semibold text-xs`}>
-                                  {formatTime(booking.start_time)}
-                                </span>
-                                {getBookingStatus(booking) === 'completed' && (
-                                  <span className="ml-auto text-green-700 font-bold">✓</span>
-                                )}
-                                {getBookingStatus(booking) === 'cancelled' && (
-                                  <span className="ml-auto text-red-600 font-bold">✕</span>
-                                )}
                               </div>
-                            );
-                          })}
-                          {dayBookings.length > 2 && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDateClick(date);
-                              }}
-                              className="w-full text-xs text-green-800 font-semibold text-center bg-green-200 hover:bg-green-300 rounded px-1 py-0.5 transition-colors border border-green-400"
-                            >
-                              +{dayBookings.length - 2} more
-                            </button>
-                          )}
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDateClick(date);
+                                }}
+                                className="w-full text-[10px] text-green-800 font-semibold text-center bg-green-200 hover:bg-green-300 rounded px-1 py-0.5 transition-colors"
+                              >
+                                {bookingCount} exams
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Desktop view - show detailed bookings */}
+                          <div className="hidden sm:block space-y-1">
+                            {dayBookings.slice(0, 2).map((booking, idx) => {
+                              const config = getMockTypeConfig(booking.mock_type, bookingCount);
+                              const isPast = isPastBooking(booking);
+
+                              return (
+                                <div
+                                  key={booking.id || idx}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleBookingClick(booking);
+                                  }}
+                                  className={`relative flex items-center gap-1 px-1.5 py-1 rounded-md text-xs cursor-pointer hover:shadow-md transition-all duration-200 transform hover:scale-105 ${
+                                    config.bg
+                                  } ${config.border} border sm:border-2 ${isPast ? 'opacity-70' : ''}`}
+                                  title={`${booking.mock_type} - ${formatTime(booking.start_time)} ${isPast ? '(Past)' : ''}`}
+                                >
+                                  <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${config.dot} text-white shadow-sm`}>
+                                    {config.abbr.charAt(0)}
+                                  </span>
+                                  <span className={`hidden lg:inline truncate ${config.text} font-semibold text-xs`}>
+                                    {formatTime(booking.start_time)}
+                                  </span>
+                                  {getBookingStatus(booking) === 'completed' && (
+                                    <span className="ml-auto text-green-700 font-bold text-xs">✓</span>
+                                  )}
+                                  {getBookingStatus(booking) === 'cancelled' && (
+                                    <span className="ml-auto text-red-600 font-bold text-xs">✕</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {dayBookings.length > 2 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDateClick(date);
+                                }}
+                                className="w-full text-xs text-green-800 font-semibold text-center bg-green-200 hover:bg-green-300 rounded px-1 py-0.5 transition-colors border border-green-400"
+                              >
+                                +{dayBookings.length - 2} more
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
 
-                      {/* Empty date indicator */}
+                      {/* Empty date indicator - smaller on mobile */}
                       {!dayBookings && (
-                        <div className="flex items-center justify-center h-12">
-                          <div className="text-2xl text-gray-300 opacity-40">−</div>
+                        <div className="flex items-center justify-center h-6 sm:h-12">
+                          <div className="text-lg sm:text-2xl text-gray-300 opacity-40">−</div>
                         </div>
                       )}
                     </>
@@ -747,76 +780,76 @@ const BookingsCalendar = ({ bookings, onBookingClick, onCancelBooking, isLoading
             })}
           </div>
 
-          {/* Enhanced Legend */}
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <div className="text-center mb-4">
-              <h4 className="text-sm font-bold text-gray-800 mb-2">📖 Calendar Legend</h4>
-              <p className="text-xs text-gray-600 font-medium bg-green-50 inline-block px-3 py-1 rounded-full border border-green-300">
-                💡 Click on green highlighted dates to view & manage bookings
+          {/* Enhanced Legend - Mobile optimized */}
+          <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-gray-200">
+            <div className="text-center mb-3 sm:mb-4">
+              <h4 className="text-xs sm:text-sm font-bold text-gray-800 mb-1 sm:mb-2">📖 Calendar Legend</h4>
+              <p className="text-[10px] sm:text-xs text-gray-600 font-medium bg-green-50 inline-block px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border border-green-300">
+                💡 Tap green dates for bookings
               </p>
             </div>
 
-            {/* Calendar Status Indicators */}
-            <div className="flex flex-wrap items-center justify-center gap-4 mb-4 text-xs">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  <div className="w-6 h-6 bg-green-100 border-2 border-green-400 rounded"></div>
-                  <div className="w-6 h-6 bg-green-200 border-2 border-green-500 rounded"></div>
-                  <div className="w-6 h-6 bg-green-300 border-2 border-green-600 rounded"></div>
+            {/* Calendar Status Indicators - Mobile grid */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-center gap-2 sm:gap-4 mb-3 sm:mb-4 text-[10px] sm:text-xs">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="flex gap-0.5 sm:gap-1">
+                  <div className="w-4 sm:w-6 h-4 sm:h-6 bg-green-100 border sm:border-2 border-green-400 rounded"></div>
+                  <div className="w-4 sm:w-6 h-4 sm:h-6 bg-green-200 border sm:border-2 border-green-500 rounded"></div>
+                  <div className="w-4 sm:w-6 h-4 sm:h-6 bg-green-300 border sm:border-2 border-green-600 rounded"></div>
                 </div>
-                <span className="text-gray-700 font-medium">Has Bookings (1-3+)</span>
+                <span className="text-gray-700 font-medium">Bookings</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gray-50 border-2 border-gray-300 rounded-lg opacity-30"></div>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="w-6 sm:w-8 h-6 sm:h-8 bg-gray-50 border sm:border-2 border-gray-300 rounded-md sm:rounded-lg opacity-30"></div>
                 <span className="text-gray-700">No Bookings</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gray-100 border-2 border-gray-300 rounded-lg opacity-40"></div>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="w-6 sm:w-8 h-6 sm:h-8 bg-gray-100 border sm:border-2 border-gray-300 rounded-md sm:rounded-lg opacity-40"></div>
                 <span className="text-gray-700">Past Date</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-green-200 border-2 border-green-600 rounded-lg ring-2 ring-green-600 ring-offset-2 shadow-lg"></div>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="w-6 sm:w-8 h-6 sm:h-8 bg-green-200 border sm:border-2 border-green-600 rounded-md sm:rounded-lg ring-1 sm:ring-2 ring-green-600 ring-offset-1 sm:ring-offset-2 shadow-lg"></div>
                 <span className="text-gray-700 font-medium">Today</span>
               </div>
             </div>
 
-            {/* Exam Type Colors */}
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs sm:text-sm">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center space-x-1">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold">S</span>
-                </div>
-                <span className="text-gray-700">Situational Judgment</span>
+            {/* Exam Type Colors - Mobile optimized */}
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-[10px] sm:text-xs md:text-sm">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <span className="inline-flex items-center justify-center w-5 sm:w-6 h-5 sm:h-6 rounded-full bg-blue-500 text-white text-[9px] sm:text-xs font-bold">S</span>
+                <span className="text-gray-700">
+                  <span className="hidden sm:inline">Situational Judgment</span>
+                  <span className="sm:hidden">Situational</span>
+                </span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="flex items-center space-x-1">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-teal-500 text-white text-xs font-bold">C</span>
-                </div>
-                <span className="text-gray-700">Clinical Skills</span>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <span className="inline-flex items-center justify-center w-5 sm:w-6 h-5 sm:h-6 rounded-full bg-teal-500 text-white text-[9px] sm:text-xs font-bold">C</span>
+                <span className="text-gray-700">
+                  <span className="hidden sm:inline">Clinical Skills</span>
+                  <span className="sm:hidden">Clinical</span>
+                </span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="flex items-center space-x-1">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-500 text-white text-xs font-bold">M</span>
-                </div>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <span className="inline-flex items-center justify-center w-5 sm:w-6 h-5 sm:h-6 rounded-full bg-orange-500 text-white text-[9px] sm:text-xs font-bold">M</span>
                 <span className="text-gray-700">Mini-mock</span>
               </div>
             </div>
 
-            {/* Status Indicators */}
-            <div className="flex justify-center items-center gap-4 mt-3 text-xs text-gray-600">
-              <div className="flex items-center gap-1">
+            {/* Status Indicators - Mobile optimized */}
+            <div className="flex justify-center items-center gap-2 sm:gap-4 mt-2 sm:mt-3 text-[10px] sm:text-xs text-gray-600">
+              <div className="flex items-center gap-0.5 sm:gap-1">
                 <span className="text-green-600">✓</span>
                 <span>Completed</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 sm:gap-1">
                 <span className="text-red-500">✕</span>
                 <span>Cancelled</span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="inline-flex px-1.5 py-0.5 bg-green-200 text-green-800 rounded-full text-xs font-medium">3</span>
-                <span>Multiple Bookings</span>
+              <div className="flex items-center gap-0.5 sm:gap-1">
+                <span className="inline-flex px-1 sm:px-1.5 py-0 sm:py-0.5 bg-green-200 text-green-800 rounded-full text-[10px] sm:text-xs font-medium">3</span>
+                <span>Multiple</span>
               </div>
             </div>
           </div>

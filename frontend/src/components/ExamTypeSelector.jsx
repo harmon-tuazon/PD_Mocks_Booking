@@ -212,11 +212,11 @@ const ExamTypeSelector = () => {
                             </td>
                             <td className="px-2 py-1.5 whitespace-nowrap text-center">
                               <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
-                                (credits?.available_credits || 0) > 0
+                                (credits?.credit_breakdown?.specific_credits || 0) > 0
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {credits?.available_credits || 0}
+                                {credits?.credit_breakdown?.specific_credits || 0}
                               </span>
                             </td>
                           </tr>
@@ -245,7 +245,7 @@ const ExamTypeSelector = () => {
                   </div>
 
                   <div className="px-2 py-1 bg-gray-50 text-xs text-gray-500">
-                    Tokens are automatically deducted when you book an exam.
+                    Specific tokens are for each exam type. Shared tokens can be used for SJ or CS exams.
                   </div>
                 </div>
               )}

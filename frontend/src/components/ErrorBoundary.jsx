@@ -39,7 +39,7 @@ class ErrorBoundary extends Component {
     });
 
     // Optionally reload the page
-    window.location.href = '/book';
+    window.location.href = '/book/exam-types';
   };
 
   render() {

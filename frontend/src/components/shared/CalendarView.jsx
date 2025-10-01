@@ -186,7 +186,7 @@ const CalendarView = ({ exams, onDateSelect, onExamSelect }) => {
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-primary-600 rounded"></div>
-                <span className="text-gray-700 font-body">Selected date</span>
+                <span className="text-gray-700 font-body">Current Date</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-gray-100 rounded"></div>

@@ -31,13 +31,16 @@ frontend/node_modules/
 
 # Build outputs (except our target dist)
 build/
-dist/
 out/
 .next/
 .nuxt/
 .cache/
 .tmp/
 temp/
+
+# IMPORTANT: Do NOT ignore frontend/dist - it's our build output
+# dist/ is commented out to allow frontend/dist
+# dist/
 
 # Frontend dev build artifacts
 frontend/.vite/

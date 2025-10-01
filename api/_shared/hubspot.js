@@ -235,16 +235,24 @@ class HubSpotService {
    * Create a new booking
    */
   async createBooking(bookingData) {
-    const payload = {
-      properties: {
-        booking_id: bookingData.bookingId,
-        name: bookingData.name,
-        email: bookingData.email,
-        dominant_hand: bookingData.dominantHand.toString(),
-        is_active: 'Active',  // Set booking as active when created
-        ...(bookingData.tokenUsed ? { token_used: bookingData.tokenUsed } : {})
-      }
+    const properties = {
+      booking_id: bookingData.bookingId,
+      name: bookingData.name,
+      email: bookingData.email,
+      is_active: 'Active',  // Set booking as active when created
+      ...(bookingData.tokenUsed ? { token_used: bookingData.tokenUsed } : {})
     };
+
+    // Add conditional fields based on what's provided
+    if (bookingData.dominantHand !== undefined) {
+      properties.dominant_hand = bookingData.dominantHand.toString();
+    }
+    
+    if (bookingData.attendingLocation) {
+      properties.attending_location = bookingData.attendingLocation;
+    }
+
+    const payload = { properties };
 
     return await this.apiCall('POST', `/crm/v3/objects/${HUBSPOT_OBJECTS.bookings}`, payload);
   }
@@ -687,7 +695,8 @@ class HubSpotService {
           has_mock_type: !!booking.properties.mock_type,
           has_exam_date: !!booking.properties.exam_date,
           raw_exam_date: booking.properties.exam_date,
-          mock_type: booking.properties.mock_type
+          mock_type: booking.properties.mock_type,
+          is_active: booking.properties.is_active // ADD THIS TO DEBUG
         });
 
         // Check if booking already has mock exam properties
@@ -752,9 +761,31 @@ class HubSpotService {
             will_include: filter === 'all' || filter === status
           });
 
-          // Determine if booking should be included based on filter and is_active status
+          // FIX: Improve is_active handling to be more robust
           const isActive = booking.properties.is_active;
-          const isCancelled = isActive === 'Cancelled' || isActive === 'cancelled';
+          
+          // Check if booking is cancelled (handle various formats)
+          const isCancelled = isActive === 'Cancelled' || 
+                            isActive === 'cancelled' || 
+                            isActive === false || 
+                            isActive === 'false' ||
+                            isActive === 'False' ||
+                            isActive === '0';
+          
+          // FIX: Handle various active states properly
+          const isActiveBooking = !isCancelled && (
+            isActive === true || 
+            isActive === 'true' || 
+            isActive === 'True' ||
+            isActive === '1' ||
+            isActive === 'Active' ||
+            isActive === 'active' ||
+            isActive === 'Scheduled' ||
+            isActive === 'scheduled' ||
+            isActive === undefined ||  // FIX: Treat undefined as active
+            isActive === null ||        // FIX: Treat null as active
+            isActive === ''             // FIX: Treat empty string as active
+          );
           
           let shouldInclude = false;
           if (filter === 'all') {
@@ -762,8 +793,19 @@ class HubSpotService {
           } else if (filter === 'cancelled') {
             shouldInclude = isCancelled;  // Cancelled filter shows only cancelled
           } else if (filter === 'upcoming' || filter === 'past') {
-            shouldInclude = (filter === status) && !isCancelled;  // Time filters exclude cancelled
+            // FIX: Use isActiveBooking instead of !isCancelled for better handling
+            shouldInclude = (filter === status) && isActiveBooking;
           }
+
+          console.log(`🔍 [ACTIVE DEBUG] Booking ${booking.id} active status:`, {
+            is_active_raw: isActive,
+            is_active_type: typeof isActive,
+            is_cancelled: isCancelled,
+            is_active_booking: isActiveBooking,
+            filter: filter,
+            status: status,
+            should_include: shouldInclude
+          });
 
           if (shouldInclude) {
             console.log(`✅ [FILTER DEBUG] Including booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
@@ -782,7 +824,7 @@ class HubSpotService {
               finalStatus: this.mapBookingStatus(booking, mockExamData, status)
             });
           } else {
-            console.log(`❌ [FILTER DEBUG] Excluding booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
+            console.log(`➖ [FILTER DEBUG] Excluding booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
           }
         } else {
           console.log(`⚠️ [BOOKING DEBUG] Booking ${booking.id} missing mock exam properties, will fetch via associations`);
@@ -911,9 +953,29 @@ class HubSpotService {
                 will_include: filter === 'all' || filter === status
               });
 
-              // Determine if booking should be included based on filter and is_active status
+              // FIX: Same improved is_active handling for association-fetched bookings
               const isActive = booking.properties.is_active || mockExam.properties.is_active;
-              const isCancelled = isActive === 'Cancelled' || isActive === 'cancelled';
+              
+              const isCancelled = isActive === 'Cancelled' || 
+                                isActive === 'cancelled' || 
+                                isActive === false || 
+                                isActive === 'false' ||
+                                isActive === 'False' ||
+                                isActive === '0';
+              
+              const isActiveBooking = !isCancelled && (
+                isActive === true || 
+                isActive === 'true' || 
+                isActive === 'True' ||
+                isActive === '1' ||
+                isActive === 'Active' ||
+                isActive === 'active' ||
+                isActive === 'Scheduled' ||
+                isActive === 'scheduled' ||
+                isActive === undefined ||
+                isActive === null ||
+                isActive === ''
+              );
               
               let shouldInclude = false;
               if (filter === 'all') {
@@ -921,7 +983,8 @@ class HubSpotService {
               } else if (filter === 'cancelled') {
                 shouldInclude = isCancelled;  // Cancelled filter shows only cancelled
               } else if (filter === 'upcoming' || filter === 'past') {
-                shouldInclude = (filter === status) && !isCancelled;  // Time filters exclude cancelled
+                // FIX: Use isActiveBooking for better handling
+                shouldInclude = (filter === status) && isActiveBooking;
               }
 
               if (shouldInclude) {
@@ -944,7 +1007,7 @@ class HubSpotService {
                   finalStatus: this.mapBookingStatus(booking, mockExamData, status)
                 });
               } else {
-                console.log(`❌ [FILTER DEBUG] Excluding association booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
+                console.log(`➖ [FILTER DEBUG] Excluding association booking ${booking.id} (status: ${status}, filter: ${filter}, is_active: ${isActive})`);
               }
             } else {
               console.warn(`❌ No mock exam data found for booking ${booking.id} (${booking.properties.booking_id}), excluding from results`);
@@ -959,7 +1022,7 @@ class HubSpotService {
             });
           }
         } else {
-          console.error(`🚨 No mock exam associations found for any of the ${bookingsNeedingMockExamData.length} bookings`);
+          console.warn(`⚠️ No mock exam associations found for any of the ${bookingsNeedingMockExamData.length} bookings`);
         }
       }
 
@@ -1035,24 +1098,45 @@ class HubSpotService {
         current_time: nowISOString
       });
 
-      // 🚨 CRITICAL DEBUG: If we expected bookings but got 0, log detailed analysis
+      // ℹ️ FILTER INFO: Log when all bookings are filtered out (expected behavior for certain filters)
       if ((bookingsResponse?.results?.length > 0) && (totalBookings === 0)) {
-        console.error(`🚨 [CRITICAL DEBUG] Found ${bookingsResponse.results.length} bookings but processed 0!`);
-        console.error('This indicates all bookings were filtered out. Reasons could be:');
-        console.error('1. All exam dates are invalid/unparseable');
-        console.error('2. All exam dates fail the upcoming/past filter');
-        console.error('3. Missing mock exam associations for all bookings');
+        // This is often expected behavior, not an error
+        console.log(`ℹ️ [FILTER INFO] Found ${bookingsResponse.results.length} booking(s), after applying filter '${filter}': 0 bookings matched`);
 
-        // Log each original booking for analysis
-        bookingsResponse.results.forEach((booking, idx) => {
-          console.error(`[${idx + 1}] Booking ${booking.id}:`, {
-            booking_id: booking.properties.booking_id,
-            has_mock_type: !!booking.properties.mock_type,
-            has_exam_date: !!booking.properties.exam_date,
-            exam_date: booking.properties.exam_date,
-            mock_type: booking.properties.mock_type
+        // Only log details if in debug mode or if we think there might be an issue
+        const hasInvalidDates = bookingsResponse.results.some(b => !b.properties.exam_date);
+        const allCancelled = bookingsResponse.results.every(b =>
+          b.properties.is_active === 'Cancelled' ||
+          b.properties.is_active === 'cancelled' ||
+          b.properties.is_active === false
+        );
+
+        if (hasInvalidDates) {
+          console.warn('⚠️ [DATA WARNING] Some bookings have missing or invalid exam dates');
+        }
+
+        if (filter === 'upcoming' || filter === 'past') {
+          console.log(`   This is expected if all bookings are ${filter === 'upcoming' ? 'in the past' : 'upcoming'}`);
+        } else if (filter === 'cancelled' && !allCancelled) {
+          console.log('   No cancelled bookings found (all bookings are active)');
+        } else if (filter === 'all') {
+          // Only warn if filter is 'all' and we still got 0 results
+          console.warn('⚠️ [DATA WARNING] Filter is "all" but no bookings were processed. Possible data issues:');
+          console.warn('   - Invalid or missing exam dates');
+          console.warn('   - Missing mock exam associations');
+
+          // Log booking details for debugging only in this case
+          bookingsResponse.results.forEach((booking, idx) => {
+            console.debug(`[DEBUG ${idx + 1}] Booking ${booking.id}:`, {
+              booking_id: booking.properties.booking_id,
+              has_mock_type: !!booking.properties.mock_type,
+              has_exam_date: !!booking.properties.exam_date,
+              exam_date: booking.properties.exam_date,
+              mock_type: booking.properties.mock_type,
+              is_active: booking.properties.is_active
+            });
           });
-        });
+        }
       }
 
       console.log(`✅ Successfully processed ${totalBookings} bookings (filter: ${filter}), returning ${paginatedBookings.length} for page ${page}`);

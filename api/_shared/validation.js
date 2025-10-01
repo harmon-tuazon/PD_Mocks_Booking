@@ -106,11 +106,6 @@ const schemas = {
         'string.email': 'Please enter a valid email address',
         'any.required': 'Email is required'
       }),
-    dominant_hand: Joi.boolean()
-      .required()
-      .messages({
-        'any.required': 'Dominant hand selection is required'
-      }),
     mock_type: Joi.string()
       .valid('Situational Judgment', 'Clinical Skills', 'Mini-mock')
       .required()
@@ -122,6 +117,29 @@ const schemas = {
       .required()
       .messages({
         'any.required': 'Exam date is required'
+      }),
+    // Conditional fields based on mock_type
+    dominant_hand: Joi.boolean()
+      .when('mock_type', {
+        is: 'Clinical Skills',
+        then: Joi.required().messages({
+          'any.required': 'Dominant hand selection is required for Clinical Skills exams'
+        }),
+        otherwise: Joi.forbidden().messages({
+          'any.unknown': 'Dominant hand is only applicable for Clinical Skills exams'
+        })
+      }),
+    attending_location: Joi.string()
+      .valid('mississauga', 'calgary', 'vancouver', 'montreal', 'richmond_hill')
+      .when('mock_type', {
+        is: Joi.string().valid('Situational Judgment', 'Mini-mock'),
+        then: Joi.required().messages({
+          'any.required': 'Attending location is required for Situational Judgment and Mini-mock exams',
+          'any.only': 'Location must be one of: Mississauga, Calgary, Vancouver, Montreal, or Richmond Hill'
+        }),
+        otherwise: Joi.forbidden().messages({
+          'any.unknown': 'Attending location is only applicable for Situational Judgment and Mini-mock exams'
+        })
       })
   }),
 

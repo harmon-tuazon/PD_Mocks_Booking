@@ -18,6 +18,7 @@ const ExamSessionsList = () => {
   const [viewMode, setViewMode] = useState('calendar'); // 'list' or 'calendar' - Default to calendar per requirements
   const [userSession, setUserSession] = useState(null);
   const [creditBreakdown, setCreditBreakdown] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'asc' });
 
   useEffect(() => {
     fetchExams();
@@ -57,7 +58,34 @@ const ExamSessionsList = () => {
       const result = await apiService.mockExams.getAvailable(mockType, true);
 
       if (result.success) {
-        setExams(result.data || []);
+        // Filter out past exams (client-side filtering for exams earlier than today)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Set to start of day for accurate date-only comparison
+
+        const upcomingExams = (result.data || []).filter(exam => {
+          // Handle missing or invalid exam dates gracefully
+          if (!exam.exam_date) {
+            console.warn('Exam missing exam_date:', exam);
+            return false;
+          }
+
+          try {
+            const examDate = new Date(exam.exam_date);
+            examDate.setHours(0, 0, 0, 0); // Set to start of day for date-only comparison
+            return examDate >= today; // Keep today's exams and future exams
+          } catch (error) {
+            console.error('Invalid exam date format:', exam.exam_date, error);
+            return false; // Exclude exams with invalid dates
+          }
+        });
+
+        // Log filtering statistics for debugging
+        const filteredCount = (result.data || []).length - upcomingExams.length;
+        if (filteredCount > 0) {
+          console.log(`Filtered out ${filteredCount} past exam(s) from ${(result.data || []).length} total exam(s)`);
+        }
+
+        setExams(upcomingExams);
       } else {
         throw new Error(result.error || 'Failed to fetch exams');
       }
@@ -97,9 +125,86 @@ const ExamSessionsList = () => {
 
   const CalendarIcon = () => (
     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
     </svg>
   );
+
+  const ClockIcon = () => (
+    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+    </svg>
+  );
+
+  const SortArrowUp = () => (
+    <svg className="w-3 h-3 inline ml-1" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+    </svg>
+  );
+
+  const SortArrowDown = () => (
+    <svg className="w-3 h-3 inline ml-1" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+    </svg>
+  );
+
+  // Sorting function
+  const sortExams = (examsToSort, config) => {
+    const sorted = [...examsToSort].sort((a, b) => {
+      let aValue, bValue;
+
+      switch (config.key) {
+        case 'date':
+          aValue = new Date(a.exam_date);
+          bValue = new Date(b.exam_date);
+          break;
+        case 'time':
+          aValue = a.start_time;
+          bValue = b.start_time;
+          break;
+        case 'location':
+          aValue = a.location.toLowerCase();
+          bValue = b.location.toLowerCase();
+          break;
+        case 'capacity':
+          aValue = a.available_slots;
+          bValue = b.available_slots;
+          break;
+        default:
+          return 0;
+      }
+
+      if (config.key === 'location') {
+        // String comparison
+        if (aValue < bValue) return config.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return config.direction === 'asc' ? 1 : -1;
+        return 0;
+      } else {
+        // Numeric/Date comparison
+        if (config.direction === 'asc') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      }
+    });
+
+    return sorted;
+  };
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedExams = () => {
+    if (viewMode === 'list') {
+      return sortExams(exams, sortConfig);
+    }
+    return exams;
+  };
 
   if (loading) {
     return (
@@ -186,7 +291,7 @@ const ExamSessionsList = () => {
         {/* View Toggle */}
         <div className="flex justify-between items-center mb-6">
           <div className="text-small font-body text-gray-600">
-            Found {exams.length} available session{exams.length !== 1 ? 's' : ''}
+            Found {exams.length} upcoming session{exams.length !== 1 ? 's' : ''}
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -227,20 +332,137 @@ const ExamSessionsList = () => {
         {/* Exam Sessions */}
         {exams.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-body font-body text-gray-600">No exam sessions available for {mockType} at this time.</p>
-            <p className="text-body font-body text-gray-600 mt-2">Please check back later or select a different exam type.</p>
+            <p className="text-body font-body text-gray-600">No upcoming exam sessions available for {mockType} at this time.</p>
+            <p className="text-body font-body text-gray-600 mt-2">All current sessions may be in the past or fully booked. Please check back later or select a different exam type.</p>
           </div>
         ) : viewMode === 'list' ? (
-          <div className="grid gap-4">
-            {exams.map((exam) => (
-              <div
-                key={exam.mock_exam_id}
-                className={`card-brand ${exam.available_slots > 0 ? 'hover:shadow-lg cursor-pointer hover:border-primary-300' : 'opacity-75'} transition-all duration-200`}
-                onClick={() => handleSelectExam(exam)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-3">
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <div className="card-brand p-0 overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-navy-50 border-b border-gray-200">
+                    <tr>
+                      <th
+                        className="px-6 py-4 text-left text-xs font-semibold text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
+                        onClick={() => handleSort('date')}
+                      >
+                        <div className="flex items-center">
+                          Date
+                          {sortConfig.key === 'date' && (
+                            sortConfig.direction === 'asc' ? <SortArrowUp /> : <SortArrowDown />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        className="px-6 py-4 text-left text-xs font-semibold text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
+                        onClick={() => handleSort('time')}
+                      >
+                        <div className="flex items-center">
+                          Time
+                          {sortConfig.key === 'time' && (
+                            sortConfig.direction === 'asc' ? <SortArrowUp /> : <SortArrowDown />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        className="px-6 py-4 text-left text-xs font-semibold text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
+                        onClick={() => handleSort('location')}
+                      >
+                        <div className="flex items-center">
+                          Location
+                          {sortConfig.key === 'location' && (
+                            sortConfig.direction === 'asc' ? <SortArrowUp /> : <SortArrowDown />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        className="px-6 py-4 text-left text-xs font-semibold text-navy-900 uppercase tracking-wider cursor-pointer hover:bg-navy-100 transition-colors"
+                        onClick={() => handleSort('capacity')}
+                      >
+                        <div className="flex items-center">
+                          Availability
+                          {sortConfig.key === 'capacity' && (
+                            sortConfig.direction === 'asc' ? <SortArrowUp /> : <SortArrowDown />
+                          )}
+                        </div>
+                      </th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-navy-900 uppercase tracking-wider">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {getSortedExams().map((exam, index) => (
+                      <tr
+                        key={exam.mock_exam_id}
+                        className={`${exam.available_slots > 0 ? 'hover:bg-gray-50' : 'bg-gray-50 opacity-75'} transition-colors`}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <CalendarIcon />
+                            <span className="ml-2 text-sm font-medium text-gray-900">
+                              {formatDate(exam.exam_date)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <ClockIcon />
+                            <span className="ml-2 text-sm text-gray-700">
+                              {formatTimeRange(exam)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <LocationIcon />
+                            <span className="ml-2 text-sm text-gray-700">
+                              {exam.location}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-3">
+                            <CapacityBadge
+                              availableSlots={exam.available_slots}
+                              capacity={exam.capacity}
+                            />
+                            <span className="text-sm text-gray-600">
+                              {exam.available_slots} of {exam.capacity} slots
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <button
+                            onClick={() => handleSelectExam(exam)}
+                            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                              exam.available_slots > 0
+                                ? 'bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                            disabled={exam.available_slots === 0}
+                          >
+                            {exam.available_slots > 0 ? 'Select' : 'Full'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Card View (Responsive) */}
+            <div className="md:hidden grid gap-4">
+              {getSortedExams().map((exam) => (
+                <div
+                  key={exam.mock_exam_id}
+                  className={`card-brand ${exam.available_slots > 0 ? 'hover:shadow-lg hover:border-primary-300' : 'opacity-75'} transition-all duration-200`}
+                >
+                  <div className="space-y-3">
+                    {/* Date and Capacity Badge */}
+                    <div className="flex items-center justify-between">
                       <h3 className="text-lg font-headline font-semibold text-navy-800">
                         {formatDate(exam.exam_date)}
                       </h3>
@@ -250,33 +472,85 @@ const ExamSessionsList = () => {
                       />
                     </div>
 
-                    <div className="flex items-center gap-6 text-sm font-body text-gray-700">
-                      <div className="flex items-center gap-1">
-                        <CalendarIcon />
+                    {/* Time and Location */}
+                    <div className="space-y-2 text-sm font-body text-gray-700">
+                      <div className="flex items-center gap-2">
+                        <ClockIcon />
                         <span>{formatTimeRange(exam)}</span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-2">
                         <LocationIcon />
                         <span>{exam.location}</span>
                       </div>
-                      <div>
-                        Capacity: {exam.capacity - exam.available_slots}/{exam.capacity} booked
+                      <div className="text-sm text-gray-600">
+                        {exam.available_slots} of {exam.capacity} slots available
                       </div>
                     </div>
-                  </div>
 
-                  <button
-                    className={`${
-                      exam.available_slots > 0 ? 'btn-brand-primary' : 'btn-outline opacity-50 cursor-not-allowed'
-                    }`}
-                    disabled={exam.available_slots === 0}
-                  >
-                    {exam.available_slots > 0 ? 'Select' : 'Full'}
-                  </button>
+                    {/* Action Button */}
+                    <button
+                      onClick={() => handleSelectExam(exam)}
+                      className={`w-full py-2 px-4 text-sm font-medium rounded-lg transition-all ${
+                        exam.available_slots > 0
+                          ? 'bg-primary-600 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                      disabled={exam.available_slots === 0}
+                    >
+                      {exam.available_slots > 0 ? 'Select Session' : 'Session Full'}
+                    </button>
+                  </div>
                 </div>
+              ))}
+            </div>
+
+            {/* Mobile Sorting Controls */}
+            <div className="md:hidden mt-4 p-4 bg-white rounded-lg border border-gray-200">
+              <p className="text-sm font-semibold text-gray-700 mb-3">Sort by:</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleSort('date')}
+                  className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                    sortConfig.key === 'date'
+                      ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                      : 'bg-gray-50 text-gray-700 border border-gray-200'
+                  }`}
+                >
+                  Date {sortConfig.key === 'date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </button>
+                <button
+                  onClick={() => handleSort('time')}
+                  className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                    sortConfig.key === 'time'
+                      ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                      : 'bg-gray-50 text-gray-700 border border-gray-200'
+                  }`}
+                >
+                  Time {sortConfig.key === 'time' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </button>
+                <button
+                  onClick={() => handleSort('location')}
+                  className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                    sortConfig.key === 'location'
+                      ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                      : 'bg-gray-50 text-gray-700 border border-gray-200'
+                  }`}
+                >
+                  Location {sortConfig.key === 'location' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </button>
+                <button
+                  onClick={() => handleSort('capacity')}
+                  className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                    sortConfig.key === 'capacity'
+                      ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                      : 'bg-gray-50 text-gray-700 border border-gray-200'
+                  }`}
+                >
+                  Availability {sortConfig.key === 'capacity' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          </>
         ) : (
           <CalendarView
             exams={exams}
@@ -287,4 +561,5 @@ const ExamSessionsList = () => {
     </div>
   );
 };
+
 export default ExamSessionsList;
