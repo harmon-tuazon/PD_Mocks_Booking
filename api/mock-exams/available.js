@@ -80,21 +80,44 @@ module.exports = async (req, res) => {
         const examIds = searchResult.results.map(exam => exam.id);
 
         // Step 2: Batch read all booking associations for all exams at once (1-2 API calls)
+        console.log(`📊 Batch reading associations for ${examIds.length} exam(s)...`);
         const allAssociations = await hubspot.batch.batchReadAssociations(
           '2-50158913', // mock_exams
           examIds,
           '2-50158943'  // bookings
         );
+        console.log(`✅ Retrieved ${allAssociations.length} association records`);
+
+        // Debug: Log first association structure
+        if (allAssociations.length > 0) {
+          console.log('📋 Sample association structure:', JSON.stringify(allAssociations[0], null, 2));
+        }
 
         // Step 3: Extract unique booking IDs
         const bookingIds = [...new Set(
-          allAssociations.flatMap(assoc => assoc.to?.map(t => t.toObjectId) || [])
+          allAssociations.flatMap(assoc => {
+            const bookings = assoc.to || [];
+            if (!assoc.to) {
+              console.warn(`⚠️ Association for exam ${assoc.from?.id} has no 'to' property`);
+            }
+            return bookings.map(t => t.toObjectId);
+          }).filter(Boolean)
         )];
+        console.log(`📝 Extracted ${bookingIds.length} unique booking IDs from ${allAssociations.length} associations`);
 
         // Step 4: Batch read all bookings to check is_active status (1-2 API calls)
         const bookings = bookingIds.length > 0
           ? await hubspot.batch.batchReadObjects('2-50158943', bookingIds, ['is_active'])
           : [];
+
+        console.log(`📦 Batch read returned ${bookings.length} booking(s) from ${bookingIds.length} requested IDs`);
+
+        // CRITICAL VALIDATION: Check for silent failure
+        if (bookingIds.length > 0 && bookings.length === 0) {
+          console.error(`🚨 CRITICAL: Batch read returned 0 bookings despite ${bookingIds.length} valid IDs!`);
+          console.error('   Requested IDs:', bookingIds);
+          console.error('   This indicates a batch read failure or all bookings are archived/deleted');
+        }
 
         // Step 5: Build booking status map
         const bookingStatusMap = new Map();
@@ -103,22 +126,38 @@ module.exports = async (req, res) => {
                           booking.properties.is_active !== 'cancelled' &&
                           booking.properties.is_active !== false;
           bookingStatusMap.set(booking.id, isActive);
+          console.log(`  Booking ${booking.id}: is_active="${booking.properties.is_active}" → counted as ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
         }
+        console.log(`🗺️ Built status map with ${bookingStatusMap.size} entries`);
 
         // Step 6: Count active bookings per exam
         const activeBookingCounts = new Map();
         for (const assoc of allAssociations) {
-          const examId = assoc.from.id;
+          const examId = assoc.from?.id;
+          if (!examId) {
+            console.error('⚠️ Association missing exam ID:', assoc);
+            continue;
+          }
+
           const associatedBookings = assoc.to || [];
 
           const activeCount = associatedBookings.filter(bookingAssoc => {
             // FIX: Convert toObjectId to string for map lookup (booking.id is a string)
             const bookingId = String(bookingAssoc.toObjectId);
-            return bookingStatusMap.get(bookingId) === true;
+            const isActive = bookingStatusMap.get(bookingId);
+
+            // Debug: Log lookup results
+            if (isActive === undefined) {
+              console.warn(`⚠️ Booking ${bookingId} not found in status map (toObjectId type: ${typeof bookingAssoc.toObjectId})`);
+            }
+
+            return isActive === true;
           }).length;
 
+          console.log(`  Exam ${examId}: ${activeCount} active booking(s) out of ${associatedBookings.length} total`);
           activeBookingCounts.set(examId, activeCount);
         }
+        console.log(`🔢 Calculated counts for ${activeBookingCounts.size} exam(s)`);
 
         // Step 7: Collect exams that need updating
         const updatesToMake = [];

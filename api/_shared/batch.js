@@ -146,7 +146,39 @@ class HubSpotBatchService {
   extractSuccessfulResults(results) {
     const successful = results
       .filter(r => r.status === 'fulfilled')
-      .flatMap(r => r.value.results || []);
+      .flatMap((r, index) => {
+        const data = r.value;
+
+        // Handle different API response structures
+        // v3 batch API: { results: [...] }
+        // v4 associations API: { results: [...] }
+        // Some APIs: { items: [...] }
+        // Direct array response: [...]
+        let items = [];
+
+        if (Array.isArray(data)) {
+          items = data;
+        } else if (data.results) {
+          items = data.results;
+        } else if (data.items) {
+          items = data.items;
+        } else if (data.data) {
+          items = data.data;
+        } else {
+          console.warn(`⚠️ Unexpected API response structure in chunk ${index}:`, Object.keys(data));
+          // Try to extract any array-like property
+          const possibleArrays = Object.values(data).filter(v => Array.isArray(v));
+          if (possibleArrays.length > 0) {
+            console.warn(`  → Found array property, using it: ${possibleArrays[0].length} items`);
+            items = possibleArrays[0];
+          } else {
+            console.error(`  → No array found in response, returning empty`);
+            items = [];
+          }
+        }
+
+        return items;
+      });
 
     const failures = results.filter(r => r.status === 'rejected');
 
@@ -156,6 +188,8 @@ class HubSpotBatchService {
         console.error('Batch error details:', failure.reason?.message || failure.reason);
       });
     }
+
+    console.log(`✅ Extracted ${successful.length} total items from ${results.length} chunk(s) (${failures.length} failed)`);
 
     return successful;
   }
