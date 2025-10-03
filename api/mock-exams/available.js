@@ -71,47 +71,122 @@ module.exports = async (req, res) => {
     const hubspot = new HubSpotService();
     const searchResult = await hubspot.searchMockExams(mock_type, true);
 
-    // Simple sequential real-time capacity calculation (proven to work)
+    // OPTIMIZED: Batch process real-time capacity if requested
     if (useRealTimeCapacity && searchResult.results.length > 0) {
-      console.log(`🔄 Real-time capacity requested for ${searchResult.results.length} exams`);
+      console.log(`🔄 Real-time capacity requested for ${searchResult.results.length} exams - using batch operations`);
 
       try {
-        const updates = [];
+        // Step 1: Collect all exam IDs
+        const examIds = searchResult.results.map(exam => exam.id);
 
-        for (const exam of searchResult.results) {
-          const capacity = parseInt(exam.properties.capacity) || 0;
-          let totalBookings = parseInt(exam.properties.total_bookings) || 0;
+        // Step 2: Batch read all booking associations for all exams at once (1-2 API calls)
+        console.log(`📊 Batch reading associations for ${examIds.length} exam(s)...`);
+        const allAssociations = await hubspot.batch.batchReadAssociations(
+          '2-50158913', // mock_exams
+          examIds,
+          '2-50158943'  // bookings
+        );
+        console.log(`✅ Retrieved ${allAssociations.length} association records`);
 
-          try {
-            console.log(`Fetching real-time booking count for mock exam ${exam.id}`);
-            const actualCount = await hubspot.getActiveBookingsCount(exam.id);
+        // Debug: Log first association structure
+        if (allAssociations.length > 0) {
+          console.log('📋 Sample association structure:', JSON.stringify(allAssociations[0], null, 2));
+        }
 
-            // Update the stored count if it differs
-            if (actualCount !== totalBookings) {
-              console.log(`Updating mock exam ${exam.id}: stored=${totalBookings}, actual=${actualCount}`);
-              updates.push({
-                id: exam.id,
-                properties: { total_bookings: actualCount.toString() }
-              });
-              exam.properties.total_bookings = actualCount.toString();
+        // Step 3: Extract unique booking IDs
+        const bookingIds = [...new Set(
+          allAssociations.flatMap(assoc => {
+            const bookings = assoc.to || [];
+            if (!assoc.to) {
+              console.warn(`⚠️ Association for exam ${assoc.from?.id} has no 'to' property`);
             }
-          } catch (error) {
-            console.error(`Failed to get real-time capacity for exam ${exam.id}, using cached value:`, error);
-            // Fall back to cached value on error
+            return bookings.map(t => t.toObjectId);
+          }).filter(Boolean)
+        )];
+        console.log(`📝 Extracted ${bookingIds.length} unique booking IDs from ${allAssociations.length} associations`);
+
+        // Step 4: Batch read all bookings to check is_active status (1-2 API calls)
+        const bookings = bookingIds.length > 0
+          ? await hubspot.batch.batchReadObjects('2-50158943', bookingIds, ['is_active'])
+          : [];
+
+        console.log(`📦 Batch read returned ${bookings.length} booking(s) from ${bookingIds.length} requested IDs`);
+
+        // CRITICAL VALIDATION: Check for silent failure
+        if (bookingIds.length > 0 && bookings.length === 0) {
+          console.error(`🚨 CRITICAL: Batch read returned 0 bookings despite ${bookingIds.length} valid IDs!`);
+          console.error('   Requested IDs:', bookingIds);
+          console.error('   This indicates a batch read failure or all bookings are archived/deleted');
+        }
+
+        // Step 5: Build booking status map
+        const bookingStatusMap = new Map();
+        for (const booking of bookings) {
+          const isActive = booking.properties.is_active !== 'Cancelled' &&
+                          booking.properties.is_active !== 'cancelled' &&
+                          booking.properties.is_active !== false;
+          bookingStatusMap.set(booking.id, isActive);
+          console.log(`  Booking ${booking.id}: is_active="${booking.properties.is_active}" → counted as ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
+        }
+        console.log(`🗺️ Built status map with ${bookingStatusMap.size} entries`);
+
+        // Step 6: Count active bookings per exam
+        const activeBookingCounts = new Map();
+        for (const assoc of allAssociations) {
+          const examId = assoc.from?.id;
+          if (!examId) {
+            console.error('⚠️ Association missing exam ID:', assoc);
+            continue;
+          }
+
+          const associatedBookings = assoc.to || [];
+
+          const activeCount = associatedBookings.filter(bookingAssoc => {
+            // FIX: Convert toObjectId to string for map lookup (booking.id is a string)
+            const bookingId = String(bookingAssoc.toObjectId);
+            const isActive = bookingStatusMap.get(bookingId);
+
+            // Debug: Log lookup results
+            if (isActive === undefined) {
+              console.warn(`⚠️ Booking ${bookingId} not found in status map (toObjectId type: ${typeof bookingAssoc.toObjectId})`);
+            }
+
+            return isActive === true;
+          }).length;
+
+          console.log(`  Exam ${examId}: ${activeCount} active booking(s) out of ${associatedBookings.length} total`);
+          activeBookingCounts.set(examId, activeCount);
+        }
+        console.log(`🔢 Calculated counts for ${activeBookingCounts.size} exam(s)`);
+
+        // Step 7: Collect exams that need updating
+        const updatesToMake = [];
+        for (const exam of searchResult.results) {
+          const currentCount = parseInt(exam.properties.total_bookings) || 0;
+          const actualCount = activeBookingCounts.get(exam.id) || 0;
+
+          if (actualCount !== currentCount) {
+            console.log(`📊 Exam ${exam.id}: stored=${currentCount}, actual=${actualCount}`);
+            updatesToMake.push({
+              id: exam.id,
+              properties: { total_bookings: actualCount.toString() }
+            });
+            // Update the exam object for processing
+            exam.properties.total_bookings = actualCount.toString();
           }
         }
 
-        // Batch update all at once
-        if (updates.length > 0) {
-          console.log(`✏️ Batch updating ${updates.length} exams with corrected booking counts`);
-          await hubspot.batch.batchUpdateObjects('2-50158913', updates);
+        // Step 8: Batch update all changed exams at once (1 API call)
+        if (updatesToMake.length > 0) {
+          console.log(`✏️ Batch updating ${updatesToMake.length} exams with corrected booking counts`);
+          await hubspot.batch.batchUpdateObjects('2-50158913', updatesToMake);
         }
 
-        console.log(`✅ Real-time capacity calculation completed for ${searchResult.results.length} exams`);
-
-      } catch (error) {
-        console.error(`❌ Real-time capacity calculation failed, using cached values:`, error);
-        // Continue with cached values from HubSpot
+        const apiCallsSaved = (examIds.length * 2) - (2 + (bookingIds.length > 100 ? 2 : 1) + (updatesToMake.length > 0 ? 1 : 0));
+        console.log(`✅ Real-time capacity completed (saved ~${apiCallsSaved} API calls)`);
+      } catch (batchError) {
+        console.error(`❌ Batch capacity calculation failed, falling back to cached values:`, batchError);
+        // Continue with cached values on error
       }
     }
 

@@ -47,7 +47,7 @@ class HubSpotBatchService {
    * @param {string} fromObjectType - Source object type
    * @param {string[]} fromIds - Array of source IDs (auto-chunks if >1000)
    * @param {string} toObjectType - Target object type
-   * @returns {Promise<Object[]>} Array of association mappings
+   * @returns {Promise<Object[]>} Array of association mappings with structure: { from: {id}, to: [{toObjectId, ...}] }
    */
   async batchReadAssociations(fromObjectType, fromIds, toObjectType) {
     if (fromIds.length === 0) return [];
@@ -66,7 +66,9 @@ class HubSpotBatchService {
       )
     );
 
-    return this.extractSuccessfulResults(results).flatMap(r => r.results || []);
+    // FIX: extractSuccessfulResults already returns the flattened results array
+    // Each result has structure: { from: {id}, to: [{toObjectId, associationTypes}] }
+    return this.extractSuccessfulResults(results);
   }
 
   /**
