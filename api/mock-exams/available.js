@@ -71,11 +71,17 @@ module.exports = async (req, res) => {
     const hubspot = new HubSpotService();
     const searchResult = await hubspot.searchMockExams(mock_type, true);
 
-    // OPTIMIZED: Batch process real-time capacity if requested
+    // SMART FALLBACK: Try batch operations, fall back to simple version if it fails
     if (useRealTimeCapacity && searchResult.results.length > 0) {
-      console.log(`🔄 Real-time capacity requested for ${searchResult.results.length} exams - using batch operations`);
+      console.log(`🔄 Real-time capacity requested for ${searchResult.results.length} exams`);
 
+      let batchSuccess = false;
+      let batchBookingCounts = new Map();
+
+      // ATTEMPT 1: Try optimized batch operations
       try {
+        console.log(`⚡ Attempting batch operations for scalability...`);
+
         // Step 1: Collect all exam IDs
         const examIds = searchResult.results.map(exam => exam.id);
 
@@ -111,13 +117,6 @@ module.exports = async (req, res) => {
           : [];
 
         console.log(`📦 Batch read returned ${bookings.length} booking(s) from ${bookingIds.length} requested IDs`);
-
-        // CRITICAL VALIDATION: Check for silent failure
-        if (bookingIds.length > 0 && bookings.length === 0) {
-          console.error(`🚨 CRITICAL: Batch read returned 0 bookings despite ${bookingIds.length} valid IDs!`);
-          console.error('   Requested IDs:', bookingIds);
-          console.error('   This indicates a batch read failure or all bookings are archived/deleted');
-        }
 
         // Step 5: Build booking status map
         const bookingStatusMap = new Map();
@@ -159,11 +158,24 @@ module.exports = async (req, res) => {
         }
         console.log(`🔢 Calculated counts for ${activeBookingCounts.size} exam(s)`);
 
+        // CRITICAL VALIDATION: Detect batch operation failures
+        const allCountsZero = Array.from(activeBookingCounts.values()).every(count => count === 0);
+        const hasBookingIds = bookingIds.length > 0;
+
+        if (allCountsZero && hasBookingIds) {
+          throw new Error(`Batch validation failed: All ${activeBookingCounts.size} exams have 0 bookings despite ${bookingIds.length} booking IDs extracted. This indicates a batch operation failure.`);
+        }
+
+        // Validation passed - batch operations successful
+        batchBookingCounts = activeBookingCounts;
+        batchSuccess = true;
+        console.log(`✅ Batch operation validation PASSED - counts look correct`);
+
         // Step 7: Collect exams that need updating
         const updatesToMake = [];
         for (const exam of searchResult.results) {
           const currentCount = parseInt(exam.properties.total_bookings) || 0;
-          const actualCount = activeBookingCounts.get(exam.id) || 0;
+          const actualCount = batchBookingCounts.get(exam.id) || 0;
 
           if (actualCount !== currentCount) {
             console.log(`📊 Exam ${exam.id}: stored=${currentCount}, actual=${actualCount}`);
@@ -183,10 +195,55 @@ module.exports = async (req, res) => {
         }
 
         const apiCallsSaved = (examIds.length * 2) - (2 + (bookingIds.length > 100 ? 2 : 1) + (updatesToMake.length > 0 ? 1 : 0));
-        console.log(`✅ Real-time capacity completed (saved ~${apiCallsSaved} API calls)`);
+        console.log(`✅ Batch operations completed successfully (saved ~${apiCallsSaved} API calls)`);
+
       } catch (batchError) {
-        console.error(`❌ Batch capacity calculation failed, falling back to cached values:`, batchError);
-        // Continue with cached values on error
+        console.error(`❌ Batch operations failed validation or encountered error:`, batchError.message);
+        batchSuccess = false;
+      }
+
+      // ATTEMPT 2: Fallback to simple sequential approach if batch failed
+      if (!batchSuccess) {
+        console.log(`🔄 Falling back to simple sequential counting (proven to work)...`);
+
+        try {
+          const updates = [];
+
+          for (const exam of searchResult.results) {
+            const capacity = parseInt(exam.properties.capacity) || 0;
+            let totalBookings = parseInt(exam.properties.total_bookings) || 0;
+
+            try {
+              console.log(`  Fetching real-time booking count for exam ${exam.id}`);
+              const actualCount = await hubspot.getActiveBookingsCount(exam.id);
+
+              // Update the stored count if it differs
+              if (actualCount !== totalBookings) {
+                console.log(`  Exam ${exam.id}: stored=${totalBookings}, actual=${actualCount}`);
+                updates.push({
+                  id: exam.id,
+                  properties: { total_bookings: actualCount.toString() }
+                });
+                exam.properties.total_bookings = actualCount.toString();
+              }
+            } catch (error) {
+              console.error(`  Failed to get count for exam ${exam.id}, using cached value:`, error.message);
+              // Fall back to cached value on error
+            }
+          }
+
+          // Batch update all at once
+          if (updates.length > 0) {
+            console.log(`✏️ Batch updating ${updates.length} exams with corrected counts`);
+            await hubspot.batch.batchUpdateObjects('2-50158913', updates);
+          }
+
+          console.log(`✅ Fallback sequential counting completed for ${searchResult.results.length} exams`);
+
+        } catch (fallbackError) {
+          console.error(`❌ Fallback counting also failed, using cached values:`, fallbackError.message);
+          // Continue with cached values from HubSpot
+        }
       }
     }
 
