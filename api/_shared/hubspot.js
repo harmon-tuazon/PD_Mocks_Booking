@@ -1449,7 +1449,6 @@ ${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}
           <li><strong>Exam Type:</strong> ${mockExamData.mock_type}</li>
           <li><strong>Exam Date:</strong> ${formattedExamDate}</li>
           <li><strong>Location:</strong> ${mockExamData.location || 'Mississauga'}</li>
-          <li><strong>Dominant Hand:</strong> ${bookingData.dominantHand ? 'Right' : 'Left'}</li>
           <li><strong>Booked On:</strong> ${bookedOnDate}</li>
         </ul>
 
@@ -1532,32 +1531,31 @@ ${cancellationData.reason ? `<strong>Reason:</strong> ${cancellationData.reason}
       }) : 'Date TBD';
 
     const noteContent = `
+      <h3>❌ Mock Exam Booking Cancelled</h3>
+      <p><strong>Booking Details:</strong></p>
+      <ul>
+      <li><strong>Booking ID:</strong> ${cancellationData.booking_id || 'N/A'}</li>
+      <li><strong>Mock Type:</strong> ${cancellationData.mock_type || 'Mock Exam'}</li>
+      <li><strong>Exam Date:</strong> ${formattedDate}</li>
+      <li><strong>Location:</strong> ${cancellationData.location || 'Location TBD'}</li>
+      <li><strong>Cancelled At:</strong> ${new Date(timestamp).toLocaleString('en-US', { timeZone: 'America/Toronto'})}</li>
+      ${cancellationData.reason ? `<li><strong>Reason:</strong> ${cancellationData.reason}</li>` : ''}
+      </ul>
 
- <h3>❌ Mock Exam Booking Cancelled</h3>
-<p><strong>Booking Details:</strong></p>
-<ul>
-<li><strong>Booking ID:</strong> ${cancellationData.booking_id || 'N/A'}</li>
-<li><strong>Mock Type:</strong> ${cancellationData.mock_type || 'Mock Exam'}</li>
-<li><strong>Exam Date:</strong> ${formattedDate}</li>
-<li><strong>Location:</strong> ${cancellationData.location || 'Location TBD'}</li>
-<li><strong>Cancelled At:</strong> ${new Date(timestamp).toLocaleString('en-US', { timeZone: 'America/Toronto'})}</li>
-${cancellationData.reason ? `<li><strong>Reason:</strong> ${cancellationData.reason}</li>` : ''}
-</ul>
+      <p><strong>Student Information:</strong></p>
+      <ul>
+      <li><strong>Student:</strong> ${cancellationData.name || cancellationData.email || 'Student'}</li>
+      </ul>
 
-<p><strong>Student Information:</strong></p>
-<ul>
-<li><strong>Student:</strong> ${cancellationData.name || cancellationData.email || 'Student'}</li>
-</ul>
+      <p><strong>Credit Information:</strong></p>
+      <ul>
+      <li><strong>Token Restored:</strong> ${cancellationData.token_used || 'Not specified'}</li>
+      </ul>
 
-<p><strong>Credit Information:</strong></p>
-<ul>
-<li><strong>Token Restored:</strong> ${cancellationData.token_used || 'Not specified'}</li>
-</ul>
-
-<hr style="margin: 15px 0; border: 0; border-top: 1px solid #e0e0e0;">
-  <p style="font-size: 12px; color: #666;">
-  <em>🔄 Booking automatically marked as cancelled via booking management system. Credit has been restored to your account.</em>
-  </p>`;
+      <hr style="margin: 15px 0; border: 0; border-top: 1px solid #e0e0e0;">
+      <p style="font-size: 12px; color: #666;">
+          <em>🔄 Booking automatically marked as cancelled via booking management system. Credit has been restored to your account.</em>
+      </p>`;
 
     const notePayload = {
       properties: {

@@ -21,7 +21,7 @@ const CalendarView = ({ exams, onDateSelect, onExamSelect }) => {
     });
     return grouped;
   }, [exams]);
-
+  
   // Generate calendar days for current month
   const calendarDays = useMemo(() => {
     const start = startOfMonth(currentDate);
